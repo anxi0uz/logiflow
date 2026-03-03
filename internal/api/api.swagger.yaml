@@ -1,0 +1,5 @@
+openapi: 3.0.3
+info:
+  title: logiflow
+  description: API для информационной системы для логистической компании
+  version: 1.0.0

@@ -1,9 +1,9 @@
 -- +goose Up
 -- +goose StatementBegin
-SELECT 'up SQL query';
+CREATE EXTENSION IF NOT EXISTS pg_tgrm;
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
-SELECT 'down SQL query';
+DROP EXTENSION IF EXISTS pg_tgrm;
 -- +goose StatementEnd

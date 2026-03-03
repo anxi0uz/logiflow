@@ -1,0 +1,24 @@
+[logiflow]
+logLevel = 1
+
+[database]
+host = "postgres"
+port = 5432
+sslmode = "disable"
+
+[server]
+host = "0.0.0.0"
+port = 3001
+readTimeout = "10s"
+writeTimeout = "30s"
+idleTimeout = "60s"
+
+[redis]
+addr = "redis:6379"
+db = 0
+refreshTokenTTL = "168h"
+accessTokenTTL = "24h"
+
+[jwt]
+issuer = "logiflow-server"
+audience = "logiflow-client"

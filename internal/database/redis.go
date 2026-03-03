@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/anxi0uz/logiflow/internal/config"
-	"github.com/redis/go-redis"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -16,7 +15,7 @@ func NewRedisConnection(ctx context.Context, cfg *config.Config) (*redis.Client,
 		DB:       cfg.Redis.DB,
 	})
 
-	_, err := rdb.Ping().Result()
+	_, err := rdb.Ping(ctx).Result()
 	if err != nil {
 		slog.ErrorContext(ctx, "Cant ping redis", slog.String("Error", err.Error()))
 		return nil, err
