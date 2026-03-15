@@ -66,8 +66,8 @@ func NewConfig(ctx context.Context, configPath string) (*Config, error) {
 
 	k := koanf.New(".")
 
-	if err := k.Load(env.Provider("HANDBOOKS_", ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "HANDBOOKS_")), "_", ".")
+	if err := k.Load(env.Provider("LOGIFLOW_", ".", func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "LOGIFLOW_")), "_", ".")
 	}), nil); err != nil {
 		return nil, fmt.Errorf("ошибка загрузки ENV: %w", err)
 	}
