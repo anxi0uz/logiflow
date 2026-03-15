@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash   VARCHAR(255) NOT NULL,
     full_name       VARCHAR(150),
     avatar_url      VARCHAR(512),
-    role            VARCHAR(50) DEFAULT 'student',
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ,
     last_login_at   TIMESTAMPTZ
