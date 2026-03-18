@@ -62,6 +62,8 @@ func (s *Server) Run() error {
 		MaxAge:           300,
 	}))
 
+	r.Use(s.MiddlewareRequestID)
+
 	r.Use(slogchi.NewWithConfig(slog.Default(), slogchi.Config{
 		DefaultLevel:     slog.LevelInfo,
 		ClientErrorLevel: slog.LevelWarn,  // 400–499 → Warn
@@ -73,7 +75,6 @@ func (s *Server) Run() error {
 	}))
 
 	r.Use(s.AuthMiddleware)
-	r.Use(s.MiddlewareRequestID)
 
 	h := api.HandlerFromMux(s, r)
 
@@ -120,12 +121,8 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		claims, err := s.validateAccessToken(r.Context(), tokenStr)
 		if err != nil {
 			slog.WarnContext(r.Context(), "Токен не прошел валидацию", slog.String("Token", tokenStr), slog.String("error", err.Error()))
+			s.JSON(w, r, http.StatusUnauthorized, "токен не прошёл валидацию", "error")
 			return
-		}
-
-		key := "access_hash:" + tokenStr
-		if _, err := s.Redis.Get(r.Context(), key).Result(); err == redis.Nil {
-			s.JSON(w, r, http.StatusUnauthorized, "token revoked or expired", "error")
 		}
 
 		ctx := context.WithValue(r.Context(), "user", claims)
@@ -208,7 +205,7 @@ func (s *Server) validateAccessToken(ctx context.Context, tokenStr string) (*Cla
 		return nil, errors.New("only HS256 allowed")
 	}
 
-	redisKey := "access_hash:" + tokenStr
+	redisKey := "access_token:" + tokenStr
 	if _, err := s.Redis.Get(ctx, redisKey).Result(); err != nil {
 		slog.ErrorContext(ctx, "redis error during token validation", "error", err.Error())
 		return nil, fmt.Errorf("redis error: %w", err)

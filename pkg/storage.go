@@ -18,7 +18,6 @@ type Querier interface {
 
 var ErrNotFound = errors.New("not found")
 
-// GetAll функция для получения всех записей из базы данных
 func GetAll[T any](ctx context.Context, table string, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) ([]T, error) {
 	sb := sqlbuilder.NewStruct(new(T)).SelectFrom(table)
 
@@ -55,7 +54,6 @@ func GetAll[T any](ctx context.Context, table string, db Querier, opts ...func(*
 	return lists, nil
 }
 
-// GetOne функция для получения одной записи из базы данных
 func GetOne[T any](ctx context.Context, db Querier, table string, opts ...func(*sqlbuilder.SelectBuilder)) (*T, error) {
 	itemsStruct := sqlbuilder.NewStruct(new(T)).For(sqlbuilder.PostgreSQL)
 
@@ -86,7 +84,6 @@ func GetOne[T any](ctx context.Context, db Querier, table string, opts ...func(*
 	return &item, nil
 }
 
-// Create функция для создания записи в базе данных
 func Create[T any](ctx context.Context, table string, item T, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) error {
 	structs := sqlbuilder.NewStruct(new(T))
 
@@ -111,7 +108,6 @@ func Create[T any](ctx context.Context, table string, item T, db Querier, opts .
 	return nil
 }
 
-// Update функция для обновления записи в базе данных
 func Update[T any](ctx context.Context, table string, item T, db Querier, opts ...func(*sqlbuilder.UpdateBuilder)) error {
 	structs := sqlbuilder.NewStruct(new(T))
 
@@ -136,7 +132,6 @@ func Update[T any](ctx context.Context, table string, item T, db Querier, opts .
 	return nil
 }
 
-// Delete функция для удаления записи из базы данных
 func Delete[T any](ctx context.Context, table string, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) error {
 	structs := sqlbuilder.NewStruct(new(T))
 
