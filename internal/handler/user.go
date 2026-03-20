@@ -168,14 +168,74 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 		FullName:     req.FullName,
 	}
 
-	if err := storage.Create[models.User](ctx, "users", user, s.DB); err != nil {
+	if err := storage.Create(ctx, "users", user, s.DB); err != nil {
 		slog.ErrorContext(ctx, "Error while creating user", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, "Server error", "error")
 		return
 	}
 	s.issueTokens(w, r, &user)
 }
-func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	claimsValue := ctx.Value("user")
+	claims, ok := claimsValue.(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+	userID := claims.ID
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "Error while begining transaction", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	err = storage.Delete[models.User](ctx, "users", tx, func(sb *sqlbuilder.DeleteBuilder) {
+		sb.Where(sb.Equal("id", userID))
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Error while deleting user", slog.String("error", err.Error()), slog.String("id", userID.String()))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+
+	jwt := r.Header.Get("Authorization")
+	tokenKey := "access_token" + jwt
+	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
+		slog.ErrorContext(ctx, "Error while deleting access token from redis", slog.String("token", jwt))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		s.JSON(w, r, http.StatusUnauthorized, "Missing refresh token", "error")
+		return
+	}
+	refreshStr := cookie.Value
+	if refreshStr == "" {
+		s.JSON(w, r, http.StatusUnauthorized, "Empty refresh token", "error")
+		return
+	}
+	key := "refresh_token:" + refreshStr
+	if err := s.Redis.Del(ctx, key).Err(); err != nil {
+		slog.ErrorContext(ctx, "Error while deleting refresh token from redis", slog.String("token", refreshStr))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "Error while committing transaction", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+
+	s.JSON(w, r, http.StatusOK, "deleted", "ok")
+}
+
 func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

@@ -132,11 +132,15 @@ func Update[T any](ctx context.Context, table string, item T, db Querier, opts .
 	return nil
 }
 
-func Delete[T any](ctx context.Context, table string, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) error {
+func Delete[T any](ctx context.Context, table string, db Querier, opts ...func(*sqlbuilder.DeleteBuilder)) error {
 	structs := sqlbuilder.NewStruct(new(T))
 
 	sb := structs.WithoutTag("db", "-").DeleteFrom(table)
 	sb.SetFlavor(sqlbuilder.PostgreSQL)
+
+	for _, opt := range opts {
+		opt(sb)
+	}
 
 	query, args := sb.Build()
 
