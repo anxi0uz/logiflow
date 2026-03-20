@@ -163,6 +163,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 		Slug:         s.GenerateUserSlug(req.FullName, uuid),
 		CreatedAt:    now,
 		UpdatedAt:    now,
+		Role:         string(req.Role),
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),
 		FullName:     req.FullName,
