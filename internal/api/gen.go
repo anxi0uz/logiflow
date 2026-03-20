@@ -11,6 +11,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for RegisterRequestRole.
+const (
+	Admin   RegisterRequestRole = "admin"
+	Client  RegisterRequestRole = "client"
+	Driver  RegisterRequestRole = "driver"
+	Manager RegisterRequestRole = "manager"
+)
+
+// Valid indicates whether the value is a known member of the RegisterRequestRole enum.
+func (e RegisterRequestRole) Valid() bool {
+	switch e {
+	case Admin:
+		return true
+	case Client:
+		return true
+	case Driver:
+		return true
+	case Manager:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiResponse defines model for ApiResponse.
 type ApiResponse struct {
 	Data      *map[string]interface{} `json:"data,omitempty"`
@@ -37,7 +61,11 @@ type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
 	FullName string              `json:"fullName"`
 	Password string              `json:"password"`
+	Role     RegisterRequestRole `json:"role"`
 }
+
+// RegisterRequestRole defines model for RegisterRequest.Role.
+type RegisterRequestRole string
 
 // TokenRefreshRequest defines model for TokenRefreshRequest.
 type TokenRefreshRequest struct {

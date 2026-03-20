@@ -98,7 +98,7 @@ components:
 
     RegisterRequest:
       type: object
-      required: [email, password, fullName]
+      required: [email, password, fullName, role]
       properties:
         email:
           type: string
@@ -108,6 +108,9 @@ components:
           minLength: 8
         fullName:
           type: string
+        role:
+          type: string
+          enum: [admin, manager, driver, client]
 
     LoginRequest:
       type: object
