@@ -139,6 +139,8 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 	s.issueTokens(w, r, user)
 }
+
+// working
 func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req api.RegisterRequest
@@ -163,6 +165,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 		Slug:         s.GenerateUserSlug(req.FullName, uuid),
 		CreatedAt:    now,
 		UpdatedAt:    now,
+		Role:         string(req.Role),
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),
 		FullName:     req.FullName,
