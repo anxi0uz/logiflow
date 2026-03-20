@@ -51,7 +51,12 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusBadRequest, "Неверный пароль", "error")
 		return
 	}
-
+	now := time.Now()
+	user.LastLoginAt = &now
+	user.UpdatedAt = now
+	err = storage.Update(ctx, "users", user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
+		sb.Where(sb.Equal("id", user.ID))
+	})
 	s.issueTokens(w, r, user)
 }
 
@@ -171,7 +176,30 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 	s.issueTokens(w, r, &user)
 }
 func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {}
-func (s *Server) GetMe(w http.ResponseWriter, r *http.Request)    {}
+func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	claimsValue := ctx.Value("user")
+	claims, ok := claimsValue.(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
+		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		return
+	}
+
+	userID := claims.ID
+	user, err := storage.GetOne[models.User](ctx, s.DB, "users", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.Equal("id", userID))
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "No user was found with that id",
+			slog.String("id", userID.String()),
+			slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, "invalid user id", "error")
+		return
+	}
+	s.JSON(w, r, http.StatusOK, user, "ok")
+}
 func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {}
 
 func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *models.User) {
@@ -184,6 +212,7 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *model
 	if err != nil {
 		slog.ErrorContext(r.Context(), "generate refresh token failed", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, "Failure during generating tokens", "error")
+		return
 	}
 
 	key := "access_token:" + access
@@ -215,6 +244,7 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *model
 	s.JSON(w, r, http.StatusOK, map[string]any{
 		"access_token": access,
 		"expires_in":   86400,
+		"user":         user,
 	}, "auth")
 }
 
@@ -271,5 +301,5 @@ func (s *Server) GenerateUserSlug(username string, uuid uuid.UUID) string {
 
 	base := slug.Make(username)
 
-	return base + uuid.String()
+	return base + "-" + uuid.String()
 }

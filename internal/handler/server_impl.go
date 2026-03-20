@@ -158,7 +158,7 @@ func (s *Server) JSON(w http.ResponseWriter, r *http.Request, status int, payloa
 		Success:   &success,
 		Data:      &map[string]interface{}{respType: payload},
 	}
-	w.Header().Set("Content-Type", "applicaton/json; charset=utf-8")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
