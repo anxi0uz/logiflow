@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at      TIMESTAMPTZ,
     last_login_at   TIMESTAMPTZ
 );
+
 -- +goose StatementEnd
 
 -- +goose Down

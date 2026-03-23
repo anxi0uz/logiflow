@@ -47,7 +47,7 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		slog.WarnContext(ctx, "Failed login to account with", slog.String("email:", string(req.Email)), slog.String("password from request", req.Password))
+		slog.WarnContext(ctx, "Failed login to account with", slog.String("email:", string(req.Email)))
 		s.JSON(w, r, http.StatusBadRequest, "Неверный пароль", "error")
 		return
 	}
@@ -207,7 +207,7 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jwt := r.Header.Get("Authorization")
-	tokenKey := "access_token" + jwt
+	tokenKey := "access_token:" + jwt
 	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
 		slog.ErrorContext(ctx, "Error while deleting access token from redis", slog.String("token", jwt))
 		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
