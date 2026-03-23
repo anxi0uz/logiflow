@@ -2,13 +2,16 @@ openapi: 3.0.3
 info:
   title: Logiflow API
   description: API для логистической информационной системы
-  version: 0.1.0
+  version: 0.2.0
   contact:
     name: anxi0uz
 
 servers:
   - url: http://localhost:3001
     description: Local development
+
+security:
+  - BearerAuth: []
 
 components:
   securitySchemes:
@@ -18,6 +21,8 @@ components:
       bearerFormat: JWT
 
   schemas:
+    # ─── Common ───────────────────────────────────────────────────────────────
+
     ApiResponse:
       type: object
       properties:
@@ -44,57 +49,7 @@ components:
         requestID:
           type: string
 
-    User:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        slug:
-          type: string
-        fullName:
-          type: string
-          nullable: true
-        avatarUrl:
-          type: string
-          nullable: true
-        passwordHash:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-          nullable: true
-        lastLoginAt:
-          type: string
-          format: date-time
-          nullable: true
-
-    UserResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        slug:
-          type: string
-        fullName:
-          type: string
-          nullable: true
-        avatarUrl:
-          type: string
-          nullable: true
-        createdAt:
-          type: string
-          format: date-time
+    # ─── Auth ─────────────────────────────────────────────────────────────────
 
     RegisterRequest:
       type: object
@@ -128,21 +83,50 @@ components:
       properties:
         refreshToken:
           type: string
-          description: Refresh токен, полученный при логине
 
     TokenResponse:
       type: object
-      required: [accessToken, refreshToken]
       properties:
         accessToken:
           type: string
-          description: Access токен (JWT)
         refreshToken:
           type: string
-          description: Refresh токен (opaque token, rotation)
         expiresIn:
           type: integer
-          description: Время жизни access токена в секундах
+
+    # ─── User ─────────────────────────────────────────────────────────────────
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        slug:
+          type: string
+        fullName:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [admin, manager, driver, client]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
 
     UserUpdate:
       type: object
@@ -159,11 +143,11 @@ components:
         password:
           type: string
           minLength: 8
-          description: Новый пароль (если меняется)
+          nullable: true
         currentPassword:
           type: string
           minLength: 8
-          description: Текущий пароль (обязателен при смене пароля)
+          nullable: true
 
     UserDeleteRequest:
       type: object
@@ -171,14 +155,409 @@ components:
       properties:
         password:
           type: string
-          description: Текущий пароль для подтверждения удаления
+
+    # ─── Vehicle ──────────────────────────────────────────────────────────────
+
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plateNumber:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        capacityKg:
+          type: number
+          nullable: true
+        capacityM3:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [available, in_transit, maintenance]
+        slug:
+          type: string
+
+    VehicleCreate:
+      type: object
+      required: [plateNumber]
+      properties:
+        plateNumber:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        capacityKg:
+          type: number
+          nullable: true
+        capacityM3:
+          type: number
+          nullable: true
+
+    VehicleUpdate:
+      type: object
+      properties:
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        year:
+          type: integer
+          nullable: true
+        capacityKg:
+          type: number
+          nullable: true
+        capacityM3:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [available, in_transit, maintenance]
+          nullable: true
+
+    # ─── Warehouse ────────────────────────────────────────────────────────────
+
+    Warehouse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    WarehouseCreate:
+      type: object
+      required: [name, address]
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+
+    WarehouseUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+          nullable: true
+
+    # ─── Manager ──────────────────────────────────────────────────────────────
+
+    Manager:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        warehouseId:
+          type: string
+          format: uuid
+          nullable: true
+        slug:
+          type: string
+
+    ManagerCreate:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        warehouseId:
+          type: string
+          format: uuid
+          nullable: true
+
+    # ─── Driver ───────────────────────────────────────────────────────────────
+
+    Driver:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+          nullable: true
+        licenseNumber:
+          type: string
+        licenseExpiry:
+          type: string
+          format: date
+        rating:
+          type: number
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [available, on_route, off_duty]
+
+    DriverCreate:
+      type: object
+      required: [userId, licenseNumber, licenseExpiry]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+          nullable: true
+        licenseNumber:
+          type: string
+        licenseExpiry:
+          type: string
+          format: date
+
+    DriverUpdate:
+      type: object
+      properties:
+        vehicleId:
+          type: string
+          format: uuid
+          nullable: true
+        licenseNumber:
+          type: string
+          nullable: true
+        licenseExpiry:
+          type: string
+          format: date
+          nullable: true
+        status:
+          type: string
+          enum: [available, on_route, off_duty]
+          nullable: true
+
+    # ─── Order ────────────────────────────────────────────────────────────────
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdById:
+          type: string
+          format: uuid
+          nullable: true
+        driverId:
+          type: string
+          format: uuid
+          nullable: true
+        managerId:
+          type: string
+          format: uuid
+          nullable: true
+        originWarehouseId:
+          type: string
+          format: uuid
+          nullable: true
+        originAddress:
+          type: string
+          nullable: true
+        destinationAddress:
+          type: string
+        cargoDescription:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          nullable: true
+        volumeM3:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [pending, assigned, in_transit, delivered, cancelled]
+        totalPrice:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        assignedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    OrderCreate:
+      type: object
+      required: [destinationAddress]
+      properties:
+        originWarehouseId:
+          type: string
+          format: uuid
+          nullable: true
+        originAddress:
+          type: string
+          nullable: true
+        destinationAddress:
+          type: string
+        cargoDescription:
+          type: string
+          nullable: true
+        weightKg:
+          type: number
+          nullable: true
+        volumeM3:
+          type: number
+          nullable: true
+
+    OrderStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [assigned, in_transit, delivered, cancelled]
+        driverId:
+          type: string
+          format: uuid
+          nullable: true
+
+    # ─── Route ────────────────────────────────────────────────────────────────
+
+    Coordinate:
+      type: array
+      items:
+        type: number
+      minItems: 2
+      maxItems: 2
+      description: "[longitude, latitude] — ORS format"
+
+    Route:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        driverId:
+          type: string
+          format: uuid
+          nullable: true
+        coordinates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Coordinate"
+          description: Массив координат маршрута от ORS
+        currentIndex:
+          type: integer
+          description: Текущая позиция водителя в массиве координат
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        distanceKm:
+          type: number
+          nullable: true
+        durationSec:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, active, finished]
+
+    RoutePosition:
+      type: object
+      description: Сообщение WebSocket — текущая позиция водителя
+      properties:
+        currentIndex:
+          type: integer
+        coordinate:
+          $ref: "#/components/schemas/Coordinate"
+        status:
+          type: string
+          enum: [active, finished]
 
 paths:
+  # ─── Auth ───────────────────────────────────────────────────────────────────
+
   /auth/register:
     post:
       operationId: authRegister
       summary: Регистрация нового пользователя
       tags: [Auth]
+      security: []
       requestBody:
         required: true
         content:
@@ -186,8 +565,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
-        "201":
-          description: Пользователь успешно создан
+        "200":
+          description: Пользователь создан, токены выданы
           content:
             application/json:
               schema:
@@ -208,8 +587,9 @@ paths:
   /auth/login:
     post:
       operationId: authLogin
-      summary: Авторизация пользователя
+      summary: Авторизация
       tags: [Auth]
+      security: []
       requestBody:
         required: true
         content:
@@ -233,29 +613,22 @@ paths:
   /auth/refresh:
     post:
       operationId: authRefresh
-      summary: Обновление access-токена через refresh-токен
+      summary: Обновление access-токена
       tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TokenRefreshRequest"
+      security: []
       responses:
         "200":
-          description: Токены успешно обновлены
+          description: Токены обновлены
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiResponse"
         "401":
-          description: Недействительный или истёкший refresh-токен
+          description: Недействительный refresh-токен
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "400":
-          description: Некорректный запрос
 
   /auth/logout:
     post:
@@ -263,15 +636,17 @@ paths:
       summary: Выход из системы
       tags: [Auth]
       responses:
-        "204":
+        "200":
           description: Успешный выход
         "401":
           description: Не авторизован
 
+  # ─── Me ─────────────────────────────────────────────────────────────────────
+
   /me:
     get:
       operationId: getMe
-      summary: Получить текущего пользователя
+      summary: Текущий пользователь
       tags: [Me]
       responses:
         "200":
@@ -285,7 +660,7 @@ paths:
 
     patch:
       operationId: updateMe
-      summary: Обновить данные текущего пользователя
+      summary: Обновить профиль
       tags: [Me]
       requestBody:
         required: true
@@ -295,7 +670,7 @@ paths:
               $ref: "#/components/schemas/UserUpdate"
       responses:
         "200":
-          description: Пользователь обновлён
+          description: Профиль обновлён
           content:
             application/json:
               schema:
@@ -308,10 +683,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Не авторизован
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
     delete:
       operationId: deleteMe
@@ -324,7 +695,7 @@ paths:
             schema:
               $ref: "#/components/schemas/UserDeleteRequest"
       responses:
-        "204":
+        "200":
           description: Аккаунт удалён
         "400":
           description: Неверный пароль
@@ -334,7 +705,489 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Не авторизован
+
+  # ─── Vehicles ───────────────────────────────────────────────────────────────
+
+  /vehicles:
+    get:
+      operationId: listVehicles
+      summary: Список транспортных средств
+      tags: [Vehicles]
+      responses:
+        "200":
+          description: Список ТС
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "401":
+          description: Не авторизован
+
+    post:
+      operationId: createVehicle
+      summary: Добавить ТС
+      tags: [Vehicles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleCreate"
+      responses:
+        "200":
+          description: ТС создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Некорректные данные
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /vehicles/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      operationId: getVehicle
+      summary: Получить ТС по slug
+      tags: [Vehicles]
+      responses:
+        "200":
+          description: Данные ТС
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    put:
+      operationId: updateVehicle
+      summary: Обновить ТС
+      tags: [Vehicles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleUpdate"
+      responses:
+        "200":
+          description: ТС обновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    delete:
+      operationId: deleteVehicle
+      summary: Удалить ТС
+      tags: [Vehicles]
+      responses:
+        "200":
+          description: ТС удалено
+        "404":
+          description: Не найдено
+
+  # ─── Warehouses ─────────────────────────────────────────────────────────────
+
+  /warehouses:
+    get:
+      operationId: listWarehouses
+      summary: Список складов
+      tags: [Warehouses]
+      responses:
+        "200":
+          description: Список складов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    post:
+      operationId: createWarehouse
+      summary: Создать склад
+      tags: [Warehouses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarehouseCreate"
+      responses:
+        "200":
+          description: Склад создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Некорректные данные
+
+  /warehouses/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      operationId: getWarehouse
+      summary: Получить склад по slug
+      tags: [Warehouses]
+      responses:
+        "200":
+          description: Данные склада
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    put:
+      operationId: updateWarehouse
+      summary: Обновить склад
+      tags: [Warehouses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarehouseUpdate"
+      responses:
+        "200":
+          description: Склад обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    delete:
+      operationId: deleteWarehouse
+      summary: Удалить склад
+      tags: [Warehouses]
+      responses:
+        "200":
+          description: Склад удалён
+
+  # ─── Managers ───────────────────────────────────────────────────────────────
+
+  /managers:
+    get:
+      operationId: listManagers
+      summary: Список менеджеров
+      tags: [Managers]
+      responses:
+        "200":
+          description: Список менеджеров
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    post:
+      operationId: createManager
+      summary: Назначить менеджера
+      tags: [Managers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagerCreate"
+      responses:
+        "200":
+          description: Менеджер создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Некорректные данные
+
+  /managers/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      operationId: getManager
+      summary: Получить менеджера по slug
+      tags: [Managers]
+      responses:
+        "200":
+          description: Данные менеджера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    delete:
+      operationId: deleteManager
+      summary: Удалить менеджера
+      tags: [Managers]
+      responses:
+        "200":
+          description: Менеджер удалён
+
+  # ─── Drivers ────────────────────────────────────────────────────────────────
+
+  /drivers:
+    get:
+      operationId: listDrivers
+      summary: Список водителей
+      tags: [Drivers]
+      responses:
+        "200":
+          description: Список водителей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    post:
+      operationId: createDriver
+      summary: Зарегистрировать водителя
+      tags: [Drivers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DriverCreate"
+      responses:
+        "200":
+          description: Водитель создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Некорректные данные
+
+  /drivers/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      operationId: getDriver
+      summary: Получить водителя по slug
+      tags: [Drivers]
+      responses:
+        "200":
+          description: Данные водителя
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    put:
+      operationId: updateDriver
+      summary: Обновить данные водителя
+      tags: [Drivers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DriverUpdate"
+      responses:
+        "200":
+          description: Данные обновлены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    delete:
+      operationId: deleteDriver
+      summary: Удалить водителя
+      tags: [Drivers]
+      responses:
+        "200":
+          description: Водитель удалён
+
+  # ─── Orders ─────────────────────────────────────────────────────────────────
+
+  /orders:
+    get:
+      operationId: listOrders
+      summary: Список заявок
+      tags: [Orders]
+      description: >
+        Клиент видит только свои заявки, менеджер — заявки своего склада,
+        водитель — назначенные на него, администратор — все.
+      responses:
+        "200":
+          description: Список заявок
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+
+    post:
+      operationId: createOrder
+      summary: Создать заявку
+      tags: [Orders]
+      description: >
+        Создаёт заявку и запрашивает маршрут в OpenRouteService по адресам.
+        Координаты сохраняются в таблице routes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderCreate"
+      responses:
+        "200":
+          description: Заявка создана
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Некорректные данные или ORS недоступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: getOrder
+      summary: Получить заявку
+      tags: [Orders]
+      responses:
+        "200":
+          description: Данные заявки
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Не найдено
+
+    delete:
+      operationId: cancelOrder
+      summary: Отменить заявку
+      tags: [Orders]
+      description: Доступно только для статуса pending.
+      responses:
+        "200":
+          description: Заявка отменена
+        "400":
+          description: Нельзя отменить заявку в текущем статусе
+        "403":
+          description: Нет доступа
+
+  /orders/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      operationId: updateOrderStatus
+      summary: Обновить статус заявки
+      tags: [Orders]
+      description: Менеджер назначает водителя (assigned), водитель обновляет (in_transit / delivered).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusUpdate"
+      responses:
+        "200":
+          description: Статус обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "400":
+          description: Недопустимый переход статуса
+        "403":
+          description: Нет доступа
+
+  # ─── Routes ─────────────────────────────────────────────────────────────────
+
+  /orders/{id}/route:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: getRoute
+      summary: Получить маршрут заявки
+      tags: [Routes]
+      description: Возвращает весь маршрут с координатами и текущим индексом.
+      responses:
+        "200":
+          description: Данные маршрута
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "404":
+          description: Маршрут не найден
+
+  /orders/{id}/route/ws:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      operationId: routeWebSocket
+      summary: WebSocket трекинг маршрута
+      tags: [Routes]
+      description: >
+        Upgrades to WebSocket. Сервер отправляет RoutePosition каждые N секунд,
+        двигая current_index по массиву координат в горутине.
+        Соединение закрывается когда статус маршрута становится finished.
+      responses:
+        "101":
+          description: Switching Protocols — WebSocket установлен
+        "404":
+          description: Маршрут не найден

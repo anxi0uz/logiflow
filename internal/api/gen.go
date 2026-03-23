@@ -4,12 +4,63 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+const (
+	BearerAuthScopes = "BearerAuth.Scopes"
+)
+
+// Defines values for DriverUpdateStatus.
+const (
+	DriverUpdateStatusAvailable DriverUpdateStatus = "available"
+	DriverUpdateStatusOffDuty   DriverUpdateStatus = "off_duty"
+	DriverUpdateStatusOnRoute   DriverUpdateStatus = "on_route"
+)
+
+// Valid indicates whether the value is a known member of the DriverUpdateStatus enum.
+func (e DriverUpdateStatus) Valid() bool {
+	switch e {
+	case DriverUpdateStatusAvailable:
+		return true
+	case DriverUpdateStatusOffDuty:
+		return true
+	case DriverUpdateStatusOnRoute:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderStatusUpdateStatus.
+const (
+	Assigned  OrderStatusUpdateStatus = "assigned"
+	Cancelled OrderStatusUpdateStatus = "cancelled"
+	Delivered OrderStatusUpdateStatus = "delivered"
+	InTransit OrderStatusUpdateStatus = "in_transit"
+)
+
+// Valid indicates whether the value is a known member of the OrderStatusUpdateStatus enum.
+func (e OrderStatusUpdateStatus) Valid() bool {
+	switch e {
+	case Assigned:
+		return true
+	case Cancelled:
+		return true
+	case Delivered:
+		return true
+	case InTransit:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for RegisterRequestRole.
 const (
@@ -35,6 +86,45 @@ func (e RegisterRequestRole) Valid() bool {
 	}
 }
 
+// Defines values for VehicleUpdateStatus.
+const (
+	VehicleUpdateStatusAvailable   VehicleUpdateStatus = "available"
+	VehicleUpdateStatusInTransit   VehicleUpdateStatus = "in_transit"
+	VehicleUpdateStatusMaintenance VehicleUpdateStatus = "maintenance"
+)
+
+// Valid indicates whether the value is a known member of the VehicleUpdateStatus enum.
+func (e VehicleUpdateStatus) Valid() bool {
+	switch e {
+	case VehicleUpdateStatusAvailable:
+		return true
+	case VehicleUpdateStatusInTransit:
+		return true
+	case VehicleUpdateStatusMaintenance:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WarehouseUpdateStatus.
+const (
+	Active   WarehouseUpdateStatus = "active"
+	Inactive WarehouseUpdateStatus = "inactive"
+)
+
+// Valid indicates whether the value is a known member of the WarehouseUpdateStatus enum.
+func (e WarehouseUpdateStatus) Valid() bool {
+	switch e {
+	case Active:
+		return true
+	case Inactive:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiResponse defines model for ApiResponse.
 type ApiResponse struct {
 	Data      *map[string]interface{} `json:"data,omitempty"`
@@ -42,6 +132,25 @@ type ApiResponse struct {
 	Status    *int                    `json:"status,omitempty"`
 	Success   *bool                   `json:"success,omitempty"`
 }
+
+// DriverCreate defines model for DriverCreate.
+type DriverCreate struct {
+	LicenseExpiry openapi_types.Date  `json:"licenseExpiry"`
+	LicenseNumber string              `json:"licenseNumber"`
+	UserId        openapi_types.UUID  `json:"userId"`
+	VehicleId     *openapi_types.UUID `json:"vehicleId,omitempty"`
+}
+
+// DriverUpdate defines model for DriverUpdate.
+type DriverUpdate struct {
+	LicenseExpiry *openapi_types.Date `json:"licenseExpiry,omitempty"`
+	LicenseNumber *string             `json:"licenseNumber,omitempty"`
+	Status        *DriverUpdateStatus `json:"status,omitempty"`
+	VehicleId     *openapi_types.UUID `json:"vehicleId,omitempty"`
+}
+
+// DriverUpdateStatus defines model for DriverUpdate.Status.
+type DriverUpdateStatus string
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
@@ -56,6 +165,31 @@ type LoginRequest struct {
 	Password string              `json:"password"`
 }
 
+// ManagerCreate defines model for ManagerCreate.
+type ManagerCreate struct {
+	UserId      openapi_types.UUID  `json:"userId"`
+	WarehouseId *openapi_types.UUID `json:"warehouseId,omitempty"`
+}
+
+// OrderCreate defines model for OrderCreate.
+type OrderCreate struct {
+	CargoDescription   *string             `json:"cargoDescription,omitempty"`
+	DestinationAddress string              `json:"destinationAddress"`
+	OriginAddress      *string             `json:"originAddress,omitempty"`
+	OriginWarehouseId  *openapi_types.UUID `json:"originWarehouseId,omitempty"`
+	VolumeM3           *float32            `json:"volumeM3,omitempty"`
+	WeightKg           *float32            `json:"weightKg,omitempty"`
+}
+
+// OrderStatusUpdate defines model for OrderStatusUpdate.
+type OrderStatusUpdate struct {
+	DriverId *openapi_types.UUID     `json:"driverId,omitempty"`
+	Status   OrderStatusUpdateStatus `json:"status"`
+}
+
+// OrderStatusUpdateStatus defines model for OrderStatusUpdate.Status.
+type OrderStatusUpdateStatus string
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -67,38 +201,78 @@ type RegisterRequest struct {
 // RegisterRequestRole defines model for RegisterRequest.Role.
 type RegisterRequestRole string
 
-// TokenRefreshRequest defines model for TokenRefreshRequest.
-type TokenRefreshRequest struct {
-	// RefreshToken Refresh токен, полученный при логине
-	RefreshToken string `json:"refreshToken"`
-}
-
 // UserDeleteRequest defines model for UserDeleteRequest.
 type UserDeleteRequest struct {
-	// Password Текущий пароль для подтверждения удаления
 	Password string `json:"password"`
 }
 
 // UserUpdate defines model for UserUpdate.
 type UserUpdate struct {
-	AvatarUrl *string `json:"avatarUrl,omitempty"`
-
-	// CurrentPassword Текущий пароль (обязателен при смене пароля)
+	AvatarUrl       *string `json:"avatarUrl,omitempty"`
 	CurrentPassword *string `json:"currentPassword,omitempty"`
 	FullName        *string `json:"fullName,omitempty"`
-
-	// Password Новый пароль (если меняется)
-	Password *string `json:"password,omitempty"`
+	Password        *string `json:"password,omitempty"`
 }
+
+// VehicleCreate defines model for VehicleCreate.
+type VehicleCreate struct {
+	Brand       *string  `json:"brand,omitempty"`
+	CapacityKg  *float32 `json:"capacityKg,omitempty"`
+	CapacityM3  *float32 `json:"capacityM3,omitempty"`
+	Model       *string  `json:"model,omitempty"`
+	PlateNumber string   `json:"plateNumber"`
+	Year        *int     `json:"year,omitempty"`
+}
+
+// VehicleUpdate defines model for VehicleUpdate.
+type VehicleUpdate struct {
+	Brand      *string              `json:"brand,omitempty"`
+	CapacityKg *float32             `json:"capacityKg,omitempty"`
+	CapacityM3 *float32             `json:"capacityM3,omitempty"`
+	Model      *string              `json:"model,omitempty"`
+	Status     *VehicleUpdateStatus `json:"status,omitempty"`
+	Year       *int                 `json:"year,omitempty"`
+}
+
+// VehicleUpdateStatus defines model for VehicleUpdate.Status.
+type VehicleUpdateStatus string
+
+// WarehouseCreate defines model for WarehouseCreate.
+type WarehouseCreate struct {
+	Address   string   `json:"address"`
+	City      *string  `json:"city,omitempty"`
+	Latitude  *float32 `json:"latitude,omitempty"`
+	Longitude *float32 `json:"longitude,omitempty"`
+	Name      string   `json:"name"`
+}
+
+// WarehouseUpdate defines model for WarehouseUpdate.
+type WarehouseUpdate struct {
+	Address   *string                `json:"address,omitempty"`
+	City      *string                `json:"city,omitempty"`
+	Latitude  *float32               `json:"latitude,omitempty"`
+	Longitude *float32               `json:"longitude,omitempty"`
+	Name      *string                `json:"name,omitempty"`
+	Status    *WarehouseUpdateStatus `json:"status,omitempty"`
+}
+
+// WarehouseUpdateStatus defines model for WarehouseUpdate.Status.
+type WarehouseUpdateStatus string
 
 // AuthLoginJSONRequestBody defines body for AuthLogin for application/json ContentType.
 type AuthLoginJSONRequestBody = LoginRequest
 
-// AuthRefreshJSONRequestBody defines body for AuthRefresh for application/json ContentType.
-type AuthRefreshJSONRequestBody = TokenRefreshRequest
-
 // AuthRegisterJSONRequestBody defines body for AuthRegister for application/json ContentType.
 type AuthRegisterJSONRequestBody = RegisterRequest
+
+// CreateDriverJSONRequestBody defines body for CreateDriver for application/json ContentType.
+type CreateDriverJSONRequestBody = DriverCreate
+
+// UpdateDriverJSONRequestBody defines body for UpdateDriver for application/json ContentType.
+type UpdateDriverJSONRequestBody = DriverUpdate
+
+// CreateManagerJSONRequestBody defines body for CreateManager for application/json ContentType.
+type CreateManagerJSONRequestBody = ManagerCreate
 
 // DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
 type DeleteMeJSONRequestBody = UserDeleteRequest
@@ -106,36 +280,132 @@ type DeleteMeJSONRequestBody = UserDeleteRequest
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UserUpdate
 
+// CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
+type CreateOrderJSONRequestBody = OrderCreate
+
+// UpdateOrderStatusJSONRequestBody defines body for UpdateOrderStatus for application/json ContentType.
+type UpdateOrderStatusJSONRequestBody = OrderStatusUpdate
+
+// CreateVehicleJSONRequestBody defines body for CreateVehicle for application/json ContentType.
+type CreateVehicleJSONRequestBody = VehicleCreate
+
+// UpdateVehicleJSONRequestBody defines body for UpdateVehicle for application/json ContentType.
+type UpdateVehicleJSONRequestBody = VehicleUpdate
+
+// CreateWarehouseJSONRequestBody defines body for CreateWarehouse for application/json ContentType.
+type CreateWarehouseJSONRequestBody = WarehouseCreate
+
+// UpdateWarehouseJSONRequestBody defines body for UpdateWarehouse for application/json ContentType.
+type UpdateWarehouseJSONRequestBody = WarehouseUpdate
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Авторизация пользователя
+	// Авторизация
 	// (POST /auth/login)
 	AuthLogin(w http.ResponseWriter, r *http.Request)
 	// Выход из системы
 	// (POST /auth/logout)
 	AuthLogout(w http.ResponseWriter, r *http.Request)
-	// Обновление access-токена через refresh-токен
+	// Обновление access-токена
 	// (POST /auth/refresh)
 	AuthRefresh(w http.ResponseWriter, r *http.Request)
 	// Регистрация нового пользователя
 	// (POST /auth/register)
 	AuthRegister(w http.ResponseWriter, r *http.Request)
+	// Список водителей
+	// (GET /drivers)
+	ListDrivers(w http.ResponseWriter, r *http.Request)
+	// Зарегистрировать водителя
+	// (POST /drivers)
+	CreateDriver(w http.ResponseWriter, r *http.Request)
+	// Удалить водителя
+	// (DELETE /drivers/{slug})
+	DeleteDriver(w http.ResponseWriter, r *http.Request, slug string)
+	// Получить водителя по slug
+	// (GET /drivers/{slug})
+	GetDriver(w http.ResponseWriter, r *http.Request, slug string)
+	// Обновить данные водителя
+	// (PUT /drivers/{slug})
+	UpdateDriver(w http.ResponseWriter, r *http.Request, slug string)
+	// Список менеджеров
+	// (GET /managers)
+	ListManagers(w http.ResponseWriter, r *http.Request)
+	// Назначить менеджера
+	// (POST /managers)
+	CreateManager(w http.ResponseWriter, r *http.Request)
+	// Удалить менеджера
+	// (DELETE /managers/{slug})
+	DeleteManager(w http.ResponseWriter, r *http.Request, slug string)
+	// Получить менеджера по slug
+	// (GET /managers/{slug})
+	GetManager(w http.ResponseWriter, r *http.Request, slug string)
 	// Удалить аккаунт
 	// (DELETE /me)
 	DeleteMe(w http.ResponseWriter, r *http.Request)
-	// Получить текущего пользователя
+	// Текущий пользователь
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
-	// Обновить данные текущего пользователя
+	// Обновить профиль
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// Список заявок
+	// (GET /orders)
+	ListOrders(w http.ResponseWriter, r *http.Request)
+	// Создать заявку
+	// (POST /orders)
+	CreateOrder(w http.ResponseWriter, r *http.Request)
+	// Отменить заявку
+	// (DELETE /orders/{id})
+	CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Получить заявку
+	// (GET /orders/{id})
+	GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Получить маршрут заявки
+	// (GET /orders/{id}/route)
+	GetRoute(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// WebSocket трекинг маршрута
+	// (GET /orders/{id}/route/ws)
+	RouteWebSocket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Обновить статус заявки
+	// (PATCH /orders/{id}/status)
+	UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Список транспортных средств
+	// (GET /vehicles)
+	ListVehicles(w http.ResponseWriter, r *http.Request)
+	// Добавить ТС
+	// (POST /vehicles)
+	CreateVehicle(w http.ResponseWriter, r *http.Request)
+	// Удалить ТС
+	// (DELETE /vehicles/{slug})
+	DeleteVehicle(w http.ResponseWriter, r *http.Request, slug string)
+	// Получить ТС по slug
+	// (GET /vehicles/{slug})
+	GetVehicle(w http.ResponseWriter, r *http.Request, slug string)
+	// Обновить ТС
+	// (PUT /vehicles/{slug})
+	UpdateVehicle(w http.ResponseWriter, r *http.Request, slug string)
+	// Список складов
+	// (GET /warehouses)
+	ListWarehouses(w http.ResponseWriter, r *http.Request)
+	// Создать склад
+	// (POST /warehouses)
+	CreateWarehouse(w http.ResponseWriter, r *http.Request)
+	// Удалить склад
+	// (DELETE /warehouses/{slug})
+	DeleteWarehouse(w http.ResponseWriter, r *http.Request, slug string)
+	// Получить склад по slug
+	// (GET /warehouses/{slug})
+	GetWarehouse(w http.ResponseWriter, r *http.Request, slug string)
+	// Обновить склад
+	// (PUT /warehouses/{slug})
+	UpdateWarehouse(w http.ResponseWriter, r *http.Request, slug string)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// Авторизация пользователя
+// Авторизация
 // (POST /auth/login)
 func (_ Unimplemented) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -147,7 +417,7 @@ func (_ Unimplemented) AuthLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Обновление access-токена через refresh-токен
+// Обновление access-токена
 // (POST /auth/refresh)
 func (_ Unimplemented) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -159,21 +429,177 @@ func (_ Unimplemented) AuthRegister(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Список водителей
+// (GET /drivers)
+func (_ Unimplemented) ListDrivers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Зарегистрировать водителя
+// (POST /drivers)
+func (_ Unimplemented) CreateDriver(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Удалить водителя
+// (DELETE /drivers/{slug})
+func (_ Unimplemented) DeleteDriver(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить водителя по slug
+// (GET /drivers/{slug})
+func (_ Unimplemented) GetDriver(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Обновить данные водителя
+// (PUT /drivers/{slug})
+func (_ Unimplemented) UpdateDriver(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список менеджеров
+// (GET /managers)
+func (_ Unimplemented) ListManagers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Назначить менеджера
+// (POST /managers)
+func (_ Unimplemented) CreateManager(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Удалить менеджера
+// (DELETE /managers/{slug})
+func (_ Unimplemented) DeleteManager(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить менеджера по slug
+// (GET /managers/{slug})
+func (_ Unimplemented) GetManager(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Удалить аккаунт
 // (DELETE /me)
 func (_ Unimplemented) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Получить текущего пользователя
+// Текущий пользователь
 // (GET /me)
 func (_ Unimplemented) GetMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Обновить данные текущего пользователя
+// Обновить профиль
 // (PATCH /me)
 func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список заявок
+// (GET /orders)
+func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Создать заявку
+// (POST /orders)
+func (_ Unimplemented) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Отменить заявку
+// (DELETE /orders/{id})
+func (_ Unimplemented) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить заявку
+// (GET /orders/{id})
+func (_ Unimplemented) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить маршрут заявки
+// (GET /orders/{id}/route)
+func (_ Unimplemented) GetRoute(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// WebSocket трекинг маршрута
+// (GET /orders/{id}/route/ws)
+func (_ Unimplemented) RouteWebSocket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Обновить статус заявки
+// (PATCH /orders/{id}/status)
+func (_ Unimplemented) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список транспортных средств
+// (GET /vehicles)
+func (_ Unimplemented) ListVehicles(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Добавить ТС
+// (POST /vehicles)
+func (_ Unimplemented) CreateVehicle(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Удалить ТС
+// (DELETE /vehicles/{slug})
+func (_ Unimplemented) DeleteVehicle(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить ТС по slug
+// (GET /vehicles/{slug})
+func (_ Unimplemented) GetVehicle(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Обновить ТС
+// (PUT /vehicles/{slug})
+func (_ Unimplemented) UpdateVehicle(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список складов
+// (GET /warehouses)
+func (_ Unimplemented) ListWarehouses(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Создать склад
+// (POST /warehouses)
+func (_ Unimplemented) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Удалить склад
+// (DELETE /warehouses/{slug})
+func (_ Unimplemented) DeleteWarehouse(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить склад по slug
+// (GET /warehouses/{slug})
+func (_ Unimplemented) GetWarehouse(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Обновить склад
+// (PUT /warehouses/{slug})
+func (_ Unimplemented) UpdateWarehouse(w http.ResponseWriter, r *http.Request, slug string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -202,6 +628,12 @@ func (siw *ServerInterfaceWrapper) AuthLogin(w http.ResponseWriter, r *http.Requ
 
 // AuthLogout operation middleware
 func (siw *ServerInterfaceWrapper) AuthLogout(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AuthLogout(w, r)
@@ -242,8 +674,249 @@ func (siw *ServerInterfaceWrapper) AuthRegister(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListDrivers operation middleware
+func (siw *ServerInterfaceWrapper) ListDrivers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDrivers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDriver operation middleware
+func (siw *ServerInterfaceWrapper) CreateDriver(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDriver(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteDriver operation middleware
+func (siw *ServerInterfaceWrapper) DeleteDriver(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteDriver(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDriver operation middleware
+func (siw *ServerInterfaceWrapper) GetDriver(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDriver(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateDriver operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDriver(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateDriver(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListManagers operation middleware
+func (siw *ServerInterfaceWrapper) ListManagers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListManagers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateManager operation middleware
+func (siw *ServerInterfaceWrapper) CreateManager(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateManager(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteManager operation middleware
+func (siw *ServerInterfaceWrapper) DeleteManager(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteManager(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetManager operation middleware
+func (siw *ServerInterfaceWrapper) GetManager(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetManager(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteMe operation middleware
 func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteMe(w, r)
@@ -259,6 +932,12 @@ func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Reque
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
 	}))
@@ -273,8 +952,475 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 // UpdateMe operation middleware
 func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Request) {
 
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrders operation middleware
+func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrders(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrder operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrder(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelOrder operation middleware
+func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrder operation middleware
+func (siw *ServerInterfaceWrapper) GetOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRoute operation middleware
+func (siw *ServerInterfaceWrapper) GetRoute(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRoute(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RouteWebSocket operation middleware
+func (siw *ServerInterfaceWrapper) RouteWebSocket(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RouteWebSocket(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOrderStatus operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOrderStatus(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListVehicles operation middleware
+func (siw *ServerInterfaceWrapper) ListVehicles(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListVehicles(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateVehicle operation middleware
+func (siw *ServerInterfaceWrapper) CreateVehicle(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateVehicle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteVehicle operation middleware
+func (siw *ServerInterfaceWrapper) DeleteVehicle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteVehicle(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVehicle operation middleware
+func (siw *ServerInterfaceWrapper) GetVehicle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVehicle(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateVehicle operation middleware
+func (siw *ServerInterfaceWrapper) UpdateVehicle(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateVehicle(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWarehouses operation middleware
+func (siw *ServerInterfaceWrapper) ListWarehouses(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWarehouses(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWarehouse operation middleware
+func (siw *ServerInterfaceWrapper) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWarehouse(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWarehouse operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWarehouse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWarehouse(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWarehouse operation middleware
+func (siw *ServerInterfaceWrapper) GetWarehouse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWarehouse(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWarehouse operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWarehouse(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWarehouse(w, r, slug)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -410,6 +1556,33 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/register", wrapper.AuthRegister)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/drivers", wrapper.ListDrivers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/drivers", wrapper.CreateDriver)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/drivers/{slug}", wrapper.DeleteDriver)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/drivers/{slug}", wrapper.GetDriver)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/drivers/{slug}", wrapper.UpdateDriver)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/managers", wrapper.ListManagers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/managers", wrapper.CreateManager)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/managers/{slug}", wrapper.DeleteManager)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/managers/{slug}", wrapper.GetManager)
+	})
+	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/me", wrapper.DeleteMe)
 	})
 	r.Group(func(r chi.Router) {
@@ -417,6 +1590,57 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/me", wrapper.UpdateMe)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orders", wrapper.ListOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/orders", wrapper.CreateOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/orders/{id}", wrapper.CancelOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orders/{id}", wrapper.GetOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orders/{id}/route", wrapper.GetRoute)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orders/{id}/route/ws", wrapper.RouteWebSocket)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/orders/{id}/status", wrapper.UpdateOrderStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/vehicles", wrapper.ListVehicles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/vehicles", wrapper.CreateVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/vehicles/{slug}", wrapper.DeleteVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/vehicles/{slug}", wrapper.GetVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/vehicles/{slug}", wrapper.UpdateVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/warehouses", wrapper.ListWarehouses)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/warehouses", wrapper.CreateWarehouse)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/warehouses/{slug}", wrapper.DeleteWarehouse)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/warehouses/{slug}", wrapper.GetWarehouse)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/warehouses/{slug}", wrapper.UpdateWarehouse)
 	})
 
 	return r
