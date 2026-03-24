@@ -26,6 +26,19 @@ type ctxKey string
 const (
 	requestIDKey ctxKey = "X-Request-ID"
 	tokenKey     ctxKey = "Authorization"
+
+	// response messages
+	MsgInternalError   = "Internal server error"
+	MsgInvalidBody     = "Invalid request body"
+	MsgNotFound        = "Not found"
+	MsgUnauthorized    = "Unauthorized"
+	MsgMissingToken    = "Missing token"
+	MsgForbidden       = "Forbidden"
+
+	// response types
+	RespError   = "error"
+	RespSuccess = "success"
+	RespNotFound = "not found"
 )
 
 type responseOptions struct {
@@ -112,7 +125,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		tokenStr := r.Header.Get("Authorization")
 		if tokenStr == "" {
-			s.JSON(w, r, http.StatusUnauthorized, "missing token", "error")
+			s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 			return
 		}
 
@@ -121,7 +134,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		claims, err := s.validateAccessToken(r.Context(), tokenStr)
 		if err != nil {
 			slog.WarnContext(r.Context(), "Токен не прошел валидацию", slog.String("Token", tokenStr), slog.String("error", err.Error()))
-			s.JSON(w, r, http.StatusUnauthorized, "токен не прошёл валидацию", "error")
+			s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 			return
 		}
 

@@ -23,8 +23,6 @@ func GetAll[T any](ctx context.Context, table string, db Querier, opts ...func(*
 
 	sb.From(table)
 
-	sb.OrderByDesc("created_at")
-
 	for _, opt := range opts {
 		opt(sb)
 	}

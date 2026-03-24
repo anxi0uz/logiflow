@@ -4,7 +4,6 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
@@ -13,9 +12,26 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for DriverStatusUpdateStatus.
 const (
-	BearerAuthScopes = "BearerAuth.Scopes"
+	DriverStatusUpdateStatusAvailable DriverStatusUpdateStatus = "available"
+	DriverStatusUpdateStatusOffDuty   DriverStatusUpdateStatus = "off_duty"
+	DriverStatusUpdateStatusOnRoute   DriverStatusUpdateStatus = "on_route"
 )
+
+// Valid indicates whether the value is a known member of the DriverStatusUpdateStatus enum.
+func (e DriverStatusUpdateStatus) Valid() bool {
+	switch e {
+	case DriverStatusUpdateStatusAvailable:
+		return true
+	case DriverStatusUpdateStatusOffDuty:
+		return true
+	case DriverStatusUpdateStatusOnRoute:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for DriverUpdateStatus.
 const (
@@ -40,46 +56,22 @@ func (e DriverUpdateStatus) Valid() bool {
 
 // Defines values for OrderStatusUpdateStatus.
 const (
-	Assigned  OrderStatusUpdateStatus = "assigned"
-	Cancelled OrderStatusUpdateStatus = "cancelled"
-	Delivered OrderStatusUpdateStatus = "delivered"
-	InTransit OrderStatusUpdateStatus = "in_transit"
+	OrderStatusUpdateStatusAssigned  OrderStatusUpdateStatus = "assigned"
+	OrderStatusUpdateStatusCancelled OrderStatusUpdateStatus = "cancelled"
+	OrderStatusUpdateStatusDelivered OrderStatusUpdateStatus = "delivered"
+	OrderStatusUpdateStatusInTransit OrderStatusUpdateStatus = "in_transit"
 )
 
 // Valid indicates whether the value is a known member of the OrderStatusUpdateStatus enum.
 func (e OrderStatusUpdateStatus) Valid() bool {
 	switch e {
-	case Assigned:
+	case OrderStatusUpdateStatusAssigned:
 		return true
-	case Cancelled:
+	case OrderStatusUpdateStatusCancelled:
 		return true
-	case Delivered:
+	case OrderStatusUpdateStatusDelivered:
 		return true
-	case InTransit:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for RegisterRequestRole.
-const (
-	Admin   RegisterRequestRole = "admin"
-	Client  RegisterRequestRole = "client"
-	Driver  RegisterRequestRole = "driver"
-	Manager RegisterRequestRole = "manager"
-)
-
-// Valid indicates whether the value is a known member of the RegisterRequestRole enum.
-func (e RegisterRequestRole) Valid() bool {
-	switch e {
-	case Admin:
-		return true
-	case Client:
-		return true
-	case Driver:
-		return true
-	case Manager:
+	case OrderStatusUpdateStatusInTransit:
 		return true
 	default:
 		return false
@@ -125,6 +117,81 @@ func (e WarehouseUpdateStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListDriversParamsStatus.
+const (
+	Available ListDriversParamsStatus = "available"
+	OffDuty   ListDriversParamsStatus = "off_duty"
+	OnRoute   ListDriversParamsStatus = "on_route"
+)
+
+// Valid indicates whether the value is a known member of the ListDriversParamsStatus enum.
+func (e ListDriversParamsStatus) Valid() bool {
+	switch e {
+	case Available:
+		return true
+	case OffDuty:
+		return true
+	case OnRoute:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListOrdersParamsStatus.
+const (
+	ListOrdersParamsStatusAssigned  ListOrdersParamsStatus = "assigned"
+	ListOrdersParamsStatusCancelled ListOrdersParamsStatus = "cancelled"
+	ListOrdersParamsStatusDelivered ListOrdersParamsStatus = "delivered"
+	ListOrdersParamsStatusInTransit ListOrdersParamsStatus = "in_transit"
+	ListOrdersParamsStatusPending   ListOrdersParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the ListOrdersParamsStatus enum.
+func (e ListOrdersParamsStatus) Valid() bool {
+	switch e {
+	case ListOrdersParamsStatusAssigned:
+		return true
+	case ListOrdersParamsStatusCancelled:
+		return true
+	case ListOrdersParamsStatusDelivered:
+		return true
+	case ListOrdersParamsStatusInTransit:
+		return true
+	case ListOrdersParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetOrdersReportParamsStatus.
+const (
+	GetOrdersReportParamsStatusAssigned  GetOrdersReportParamsStatus = "assigned"
+	GetOrdersReportParamsStatusCancelled GetOrdersReportParamsStatus = "cancelled"
+	GetOrdersReportParamsStatusDelivered GetOrdersReportParamsStatus = "delivered"
+	GetOrdersReportParamsStatusInTransit GetOrdersReportParamsStatus = "in_transit"
+	GetOrdersReportParamsStatusPending   GetOrdersReportParamsStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the GetOrdersReportParamsStatus enum.
+func (e GetOrdersReportParamsStatus) Valid() bool {
+	switch e {
+	case GetOrdersReportParamsStatusAssigned:
+		return true
+	case GetOrdersReportParamsStatusCancelled:
+		return true
+	case GetOrdersReportParamsStatusDelivered:
+		return true
+	case GetOrdersReportParamsStatusInTransit:
+		return true
+	case GetOrdersReportParamsStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApiResponse defines model for ApiResponse.
 type ApiResponse struct {
 	Data      *map[string]interface{} `json:"data,omitempty"`
@@ -135,11 +202,21 @@ type ApiResponse struct {
 
 // DriverCreate defines model for DriverCreate.
 type DriverCreate struct {
+	Email         openapi_types.Email `json:"email"`
+	FullName      string              `json:"fullName"`
 	LicenseExpiry openapi_types.Date  `json:"licenseExpiry"`
 	LicenseNumber string              `json:"licenseNumber"`
-	UserId        openapi_types.UUID  `json:"userId"`
+	Password      string              `json:"password"`
 	VehicleId     *openapi_types.UUID `json:"vehicleId,omitempty"`
 }
+
+// DriverStatusUpdate defines model for DriverStatusUpdate.
+type DriverStatusUpdate struct {
+	Status DriverStatusUpdateStatus `json:"status"`
+}
+
+// DriverStatusUpdateStatus defines model for DriverStatusUpdate.Status.
+type DriverStatusUpdateStatus string
 
 // DriverUpdate defines model for DriverUpdate.
 type DriverUpdate struct {
@@ -167,7 +244,9 @@ type LoginRequest struct {
 
 // ManagerCreate defines model for ManagerCreate.
 type ManagerCreate struct {
-	UserId      openapi_types.UUID  `json:"userId"`
+	Email       openapi_types.Email `json:"email"`
+	FullName    string              `json:"fullName"`
+	Password    string              `json:"password"`
 	WarehouseId *openapi_types.UUID `json:"warehouseId,omitempty"`
 }
 
@@ -195,11 +274,7 @@ type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
 	FullName string              `json:"fullName"`
 	Password string              `json:"password"`
-	Role     RegisterRequestRole `json:"role"`
 }
-
-// RegisterRequestRole defines model for RegisterRequest.Role.
-type RegisterRequestRole string
 
 // UserDeleteRequest defines model for UserDeleteRequest.
 type UserDeleteRequest struct {
@@ -259,6 +334,40 @@ type WarehouseUpdate struct {
 // WarehouseUpdateStatus defines model for WarehouseUpdate.Status.
 type WarehouseUpdateStatus string
 
+// ListDriversParams defines parameters for ListDrivers.
+type ListDriversParams struct {
+	Status *ListDriversParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// ListDriversParamsStatus defines parameters for ListDrivers.
+type ListDriversParamsStatus string
+
+// ListNotificationsParams defines parameters for ListNotifications.
+type ListNotificationsParams struct {
+	UnreadOnly *bool `form:"unreadOnly,omitempty" json:"unreadOnly,omitempty"`
+}
+
+// ListOrdersParams defines parameters for ListOrders.
+type ListOrdersParams struct {
+	Status   *ListOrdersParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	DriverId *openapi_types.UUID     `form:"driverId,omitempty" json:"driverId,omitempty"`
+}
+
+// ListOrdersParamsStatus defines parameters for ListOrders.
+type ListOrdersParamsStatus string
+
+// GetOrdersReportParams defines parameters for GetOrdersReport.
+type GetOrdersReportParams struct {
+	From        *openapi_types.Date          `form:"from,omitempty" json:"from,omitempty"`
+	To          *openapi_types.Date          `form:"to,omitempty" json:"to,omitempty"`
+	Status      *GetOrdersReportParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	DriverId    *openapi_types.UUID          `form:"driverId,omitempty" json:"driverId,omitempty"`
+	WarehouseId *openapi_types.UUID          `form:"warehouseId,omitempty" json:"warehouseId,omitempty"`
+}
+
+// GetOrdersReportParamsStatus defines parameters for GetOrdersReport.
+type GetOrdersReportParamsStatus string
+
 // AuthLoginJSONRequestBody defines body for AuthLogin for application/json ContentType.
 type AuthLoginJSONRequestBody = LoginRequest
 
@@ -267,6 +376,9 @@ type AuthRegisterJSONRequestBody = RegisterRequest
 
 // CreateDriverJSONRequestBody defines body for CreateDriver for application/json ContentType.
 type CreateDriverJSONRequestBody = DriverCreate
+
+// UpdateMyDriverStatusJSONRequestBody defines body for UpdateMyDriverStatus for application/json ContentType.
+type UpdateMyDriverStatusJSONRequestBody = DriverStatusUpdate
 
 // UpdateDriverJSONRequestBody defines body for UpdateDriver for application/json ContentType.
 type UpdateDriverJSONRequestBody = DriverUpdate
@@ -309,15 +421,18 @@ type ServerInterface interface {
 	// Обновление access-токена
 	// (POST /auth/refresh)
 	AuthRefresh(w http.ResponseWriter, r *http.Request)
-	// Регистрация нового пользователя
+	// Регистрация клиента
 	// (POST /auth/register)
 	AuthRegister(w http.ResponseWriter, r *http.Request)
 	// Список водителей
 	// (GET /drivers)
-	ListDrivers(w http.ResponseWriter, r *http.Request)
-	// Зарегистрировать водителя
+	ListDrivers(w http.ResponseWriter, r *http.Request, params ListDriversParams)
+	// Создать водителя
 	// (POST /drivers)
 	CreateDriver(w http.ResponseWriter, r *http.Request)
+	// Водитель меняет свой статус
+	// (PATCH /drivers/me/status)
+	UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request)
 	// Удалить водителя
 	// (DELETE /drivers/{slug})
 	DeleteDriver(w http.ResponseWriter, r *http.Request, slug string)
@@ -330,7 +445,7 @@ type ServerInterface interface {
 	// Список менеджеров
 	// (GET /managers)
 	ListManagers(w http.ResponseWriter, r *http.Request)
-	// Назначить менеджера
+	// Создать менеджера
 	// (POST /managers)
 	CreateManager(w http.ResponseWriter, r *http.Request)
 	// Удалить менеджера
@@ -348,9 +463,18 @@ type ServerInterface interface {
 	// Обновить профиль
 	// (PATCH /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// Поездки текущего водителя
+	// (GET /me/trips)
+	GetMyTrips(w http.ResponseWriter, r *http.Request)
+	// Список уведомлений текущего пользователя
+	// (GET /notifications)
+	ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams)
+	// Отметить уведомление как прочитанное
+	// (PATCH /notifications/{id}/read)
+	MarkNotificationRead(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Список заявок
 	// (GET /orders)
-	ListOrders(w http.ResponseWriter, r *http.Request)
+	ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams)
 	// Создать заявку
 	// (POST /orders)
 	CreateOrder(w http.ResponseWriter, r *http.Request)
@@ -369,6 +493,12 @@ type ServerInterface interface {
 	// Обновить статус заявки
 	// (PATCH /orders/{id}/status)
 	UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Дашборд менеджмента
+	// (GET /reports/dashboard)
+	GetDashboard(w http.ResponseWriter, r *http.Request)
+	// Отчёт по заявкам
+	// (GET /reports/orders)
+	GetOrdersReport(w http.ResponseWriter, r *http.Request, params GetOrdersReportParams)
 	// Список транспортных средств
 	// (GET /vehicles)
 	ListVehicles(w http.ResponseWriter, r *http.Request)
@@ -423,7 +553,7 @@ func (_ Unimplemented) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Регистрация нового пользователя
+// Регистрация клиента
 // (POST /auth/register)
 func (_ Unimplemented) AuthRegister(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -431,13 +561,19 @@ func (_ Unimplemented) AuthRegister(w http.ResponseWriter, r *http.Request) {
 
 // Список водителей
 // (GET /drivers)
-func (_ Unimplemented) ListDrivers(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListDrivers(w http.ResponseWriter, r *http.Request, params ListDriversParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Зарегистрировать водителя
+// Создать водителя
 // (POST /drivers)
 func (_ Unimplemented) CreateDriver(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Водитель меняет свой статус
+// (PATCH /drivers/me/status)
+func (_ Unimplemented) UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -465,7 +601,7 @@ func (_ Unimplemented) ListManagers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Назначить менеджера
+// Создать менеджера
 // (POST /managers)
 func (_ Unimplemented) CreateManager(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -501,9 +637,27 @@ func (_ Unimplemented) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Поездки текущего водителя
+// (GET /me/trips)
+func (_ Unimplemented) GetMyTrips(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список уведомлений текущего пользователя
+// (GET /notifications)
+func (_ Unimplemented) ListNotifications(w http.ResponseWriter, r *http.Request, params ListNotificationsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Отметить уведомление как прочитанное
+// (PATCH /notifications/{id}/read)
+func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Список заявок
 // (GET /orders)
-func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -540,6 +694,18 @@ func (_ Unimplemented) RouteWebSocket(w http.ResponseWriter, r *http.Request, id
 // Обновить статус заявки
 // (PATCH /orders/{id}/status)
 func (_ Unimplemented) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Дашборд менеджмента
+// (GET /reports/dashboard)
+func (_ Unimplemented) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Отчёт по заявкам
+// (GET /reports/orders)
+func (_ Unimplemented) GetOrdersReport(w http.ResponseWriter, r *http.Request, params GetOrdersReportParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -629,12 +795,6 @@ func (siw *ServerInterfaceWrapper) AuthLogin(w http.ResponseWriter, r *http.Requ
 // AuthLogout operation middleware
 func (siw *ServerInterfaceWrapper) AuthLogout(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AuthLogout(w, r)
 	}))
@@ -677,14 +837,21 @@ func (siw *ServerInterfaceWrapper) AuthRegister(w http.ResponseWriter, r *http.R
 // ListDrivers operation middleware
 func (siw *ServerInterfaceWrapper) ListDrivers(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
+	var err error
 
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDriversParams
 
-	r = r.WithContext(ctx)
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListDrivers(w, r)
+		siw.Handler.ListDrivers(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -697,14 +864,22 @@ func (siw *ServerInterfaceWrapper) ListDrivers(w http.ResponseWriter, r *http.Re
 // CreateDriver operation middleware
 func (siw *ServerInterfaceWrapper) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateDriver(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMyDriverStatus operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMyDriverStatus(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -727,12 +902,6 @@ func (siw *ServerInterfaceWrapper) DeleteDriver(w http.ResponseWriter, r *http.R
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
 		return
 	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteDriver(w, r, slug)
@@ -759,12 +928,6 @@ func (siw *ServerInterfaceWrapper) GetDriver(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDriver(w, r, slug)
 	}))
@@ -790,12 +953,6 @@ func (siw *ServerInterfaceWrapper) UpdateDriver(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateDriver(w, r, slug)
 	}))
@@ -810,12 +967,6 @@ func (siw *ServerInterfaceWrapper) UpdateDriver(w http.ResponseWriter, r *http.R
 // ListManagers operation middleware
 func (siw *ServerInterfaceWrapper) ListManagers(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListManagers(w, r)
 	}))
@@ -829,12 +980,6 @@ func (siw *ServerInterfaceWrapper) ListManagers(w http.ResponseWriter, r *http.R
 
 // CreateManager operation middleware
 func (siw *ServerInterfaceWrapper) CreateManager(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateManager(w, r)
@@ -861,12 +1006,6 @@ func (siw *ServerInterfaceWrapper) DeleteManager(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteManager(w, r, slug)
 	}))
@@ -892,12 +1031,6 @@ func (siw *ServerInterfaceWrapper) GetManager(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetManager(w, r, slug)
 	}))
@@ -911,12 +1044,6 @@ func (siw *ServerInterfaceWrapper) GetManager(w http.ResponseWriter, r *http.Req
 
 // DeleteMe operation middleware
 func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteMe(w, r)
@@ -932,12 +1059,6 @@ func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Reque
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
 	}))
@@ -952,14 +1073,74 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 // UpdateMe operation middleware
 func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMyTrips operation middleware
+func (siw *ServerInterfaceWrapper) GetMyTrips(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMyTrips(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotifications operation middleware
+func (siw *ServerInterfaceWrapper) ListNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListNotificationsParams
+
+	// ------------- Optional query parameter "unreadOnly" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "unreadOnly", r.URL.Query(), &params.UnreadOnly, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "unreadOnly", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotifications(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkNotificationRead operation middleware
+func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkNotificationRead(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -972,14 +1153,29 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 // ListOrders operation middleware
 func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
+	var err error
 
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOrdersParams
 
-	r = r.WithContext(ctx)
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "driverId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "driverId", r.URL.Query(), &params.DriverId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "driverId", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOrders(w, r)
+		siw.Handler.ListOrders(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -991,12 +1187,6 @@ func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Req
 
 // CreateOrder operation middleware
 func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateOrder(w, r)
@@ -1023,12 +1213,6 @@ func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CancelOrder(w, r, id)
 	}))
@@ -1053,12 +1237,6 @@ func (siw *ServerInterfaceWrapper) GetOrder(w http.ResponseWriter, r *http.Reque
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
 		return
 	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrder(w, r, id)
@@ -1085,12 +1263,6 @@ func (siw *ServerInterfaceWrapper) GetRoute(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetRoute(w, r, id)
 	}))
@@ -1115,12 +1287,6 @@ func (siw *ServerInterfaceWrapper) RouteWebSocket(w http.ResponseWriter, r *http
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
 		return
 	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RouteWebSocket(w, r, id)
@@ -1147,12 +1313,6 @@ func (siw *ServerInterfaceWrapper) UpdateOrderStatus(w http.ResponseWriter, r *h
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateOrderStatus(w, r, id)
 	}))
@@ -1164,14 +1324,81 @@ func (siw *ServerInterfaceWrapper) UpdateOrderStatus(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetDashboard operation middleware
+func (siw *ServerInterfaceWrapper) GetDashboard(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDashboard(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrdersReport operation middleware
+func (siw *ServerInterfaceWrapper) GetOrdersReport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetOrdersReportParams
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: "date"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "driverId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "driverId", r.URL.Query(), &params.DriverId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "driverId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "warehouseId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "warehouseId", r.URL.Query(), &params.WarehouseId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "warehouseId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrdersReport(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListVehicles operation middleware
 func (siw *ServerInterfaceWrapper) ListVehicles(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListVehicles(w, r)
@@ -1186,12 +1413,6 @@ func (siw *ServerInterfaceWrapper) ListVehicles(w http.ResponseWriter, r *http.R
 
 // CreateVehicle operation middleware
 func (siw *ServerInterfaceWrapper) CreateVehicle(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateVehicle(w, r)
@@ -1218,12 +1439,6 @@ func (siw *ServerInterfaceWrapper) DeleteVehicle(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteVehicle(w, r, slug)
 	}))
@@ -1248,12 +1463,6 @@ func (siw *ServerInterfaceWrapper) GetVehicle(w http.ResponseWriter, r *http.Req
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
 		return
 	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetVehicle(w, r, slug)
@@ -1280,12 +1489,6 @@ func (siw *ServerInterfaceWrapper) UpdateVehicle(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateVehicle(w, r, slug)
 	}))
@@ -1300,12 +1503,6 @@ func (siw *ServerInterfaceWrapper) UpdateVehicle(w http.ResponseWriter, r *http.
 // ListWarehouses operation middleware
 func (siw *ServerInterfaceWrapper) ListWarehouses(w http.ResponseWriter, r *http.Request) {
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListWarehouses(w, r)
 	}))
@@ -1319,12 +1516,6 @@ func (siw *ServerInterfaceWrapper) ListWarehouses(w http.ResponseWriter, r *http
 
 // CreateWarehouse operation middleware
 func (siw *ServerInterfaceWrapper) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateWarehouse(w, r)
@@ -1351,12 +1542,6 @@ func (siw *ServerInterfaceWrapper) DeleteWarehouse(w http.ResponseWriter, r *htt
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteWarehouse(w, r, slug)
 	}))
@@ -1382,12 +1567,6 @@ func (siw *ServerInterfaceWrapper) GetWarehouse(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetWarehouse(w, r, slug)
 	}))
@@ -1412,12 +1591,6 @@ func (siw *ServerInterfaceWrapper) UpdateWarehouse(w http.ResponseWriter, r *htt
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
 		return
 	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateWarehouse(w, r, slug)
@@ -1562,6 +1735,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/drivers", wrapper.CreateDriver)
 	})
 	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/drivers/me/status", wrapper.UpdateMyDriverStatus)
+	})
+	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/drivers/{slug}", wrapper.DeleteDriver)
 	})
 	r.Group(func(r chi.Router) {
@@ -1592,6 +1768,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/me", wrapper.UpdateMe)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/me/trips", wrapper.GetMyTrips)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/notifications", wrapper.ListNotifications)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/notifications/{id}/read", wrapper.MarkNotificationRead)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/orders", wrapper.ListOrders)
 	})
 	r.Group(func(r chi.Router) {
@@ -1611,6 +1796,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/orders/{id}/status", wrapper.UpdateOrderStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/reports/dashboard", wrapper.GetDashboard)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/reports/orders", wrapper.GetOrdersReport)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/vehicles", wrapper.ListVehicles)

@@ -22,3 +22,9 @@ accessTokenTTL = "24h"
 [jwt]
 issuer = "logiflow-server"
 audience = "logiflow-client"
+
+[pricing]
+baseFee = 500.0
+perKm   = 25.0
+perKg   = 3.0
+perM3   = 150.0

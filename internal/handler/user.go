@@ -33,7 +33,7 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	var req api.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.JSON(w, r, http.StatusBadRequest, "Ошибка при получении данных", "error")
+		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}
 
@@ -65,32 +65,32 @@ func (s *Server) AuthLogout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		s.JSON(w, r, http.StatusUnauthorized, "Missing refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 		return
 	}
 	refreshStr := cookie.Value
 	if refreshStr == "" {
-		s.JSON(w, r, http.StatusUnauthorized, "Empty refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 
 	refreshKey := "refresh_token:" + refreshStr
 	if err := s.Redis.Del(ctx, refreshKey).Err(); err != nil {
 		slog.ErrorContext(ctx, "Error while removing refresh token from redis", slog.String("token", refreshStr), slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusUnauthorized, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
 	tokenStr := r.Header.Get("Authorization")
 	if tokenStr == "" {
-		s.JSON(w, r, http.StatusUnauthorized, "missing token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 		return
 	}
 
 	tokenKey := "access_token:" + tokenStr
 	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
 		slog.ErrorContext(ctx, "Error while removing access token from redis", slog.String("token", tokenStr), slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusUnauthorized, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 }
@@ -99,17 +99,17 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		s.JSON(w, r, http.StatusUnauthorized, "Missing refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 		return
 	}
 	refreshStr := cookie.Value
 	if refreshStr == "" {
-		s.JSON(w, r, http.StatusUnauthorized, "Empty refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 	key := "refresh_token:" + refreshStr
 	if _, err := s.Redis.Get(ctx, key).Result(); err == redis.Nil {
-		s.JSON(w, r, http.StatusUnauthorized, "No active refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 
@@ -119,13 +119,13 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 	if !ok {
 		slog.ErrorContext(ctx, "Error parsing claims", slog.Any("claims", claims))
-		s.JSON(w, r, http.StatusInternalServerError, nil, "internal server error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
 	userID := claims.ID
 	if userID == uuid.Nil {
-		s.JSON(w, r, http.StatusUnauthorized, "Missing user id in token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "user with that id not found", slog.Any("id", userID.String()), "error", err.Error())
-		s.JSON(w, r, http.StatusUnauthorized, "Invalid user id in token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 	s.issueTokens(w, r, user)
@@ -146,13 +146,13 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 	var req api.RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.JSON(w, r, http.StatusBadRequest, "invalid request body", "error")
+		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		s.JSON(w, r, http.StatusInternalServerError, "error while hashing password", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
@@ -165,7 +165,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 		Slug:         s.GenerateUserSlug(req.FullName, uuid),
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		Role:         string(req.Role),
+		Role:         "client",
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),
 		FullName:     req.FullName,
@@ -173,7 +173,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 
 	if err := storage.Create(ctx, "users", user, s.DB); err != nil {
 		slog.ErrorContext(ctx, "Error while creating user", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	s.issueTokens(w, r, &user)
@@ -185,14 +185,14 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsValue.(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	userID := claims.ID
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "Error while begining transaction", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -202,7 +202,7 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "Error while deleting user", slog.String("error", err.Error()), slog.String("id", userID.String()))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
@@ -210,29 +210,29 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	tokenKey := "access_token:" + jwt
 	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
 		slog.ErrorContext(ctx, "Error while deleting access token from redis", slog.String("token", jwt))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		s.JSON(w, r, http.StatusUnauthorized, "Missing refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 		return
 	}
 	refreshStr := cookie.Value
 	if refreshStr == "" {
-		s.JSON(w, r, http.StatusUnauthorized, "Empty refresh token", "error")
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 	key := "refresh_token:" + refreshStr
 	if err := s.Redis.Del(ctx, key).Err(); err != nil {
 		slog.ErrorContext(ctx, "Error while deleting refresh token from redis", slog.String("token", refreshStr))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		slog.ErrorContext(ctx, "Error while committing transaction", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
@@ -246,7 +246,7 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := claimsValue.(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
-		s.JSON(w, r, http.StatusInternalServerError, "Internal server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
@@ -258,12 +258,14 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "No user was found with that id",
 			slog.String("id", userID.String()),
 			slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "invalid user id", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	s.JSON(w, r, http.StatusOK, user, "ok")
 }
 func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {}
+
+func (s *Server) GetMyTrips(w http.ResponseWriter, r *http.Request) {}
 
 func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *models.User) {
 	access, err := s.generateAccessToken(user, s.Config.RedisAccessTokenDur())
@@ -274,7 +276,7 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *model
 	refresh, err := s.generateRefreshToken()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "generate refresh token failed", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Failure during generating tokens", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
@@ -283,14 +285,14 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *model
 	err = s.Redis.Set(r.Context(), key, "valid", s.Config.RedisAccessTokenDur()).Err()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Failed to set access token in redis", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
 	err = s.Redis.Set(r.Context(), refreshkey, "valid", s.Config.RedisRefreshTokenDur()).Err()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Failed to set refresh token in redis", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, "Server error", "error")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
