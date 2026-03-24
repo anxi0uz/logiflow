@@ -57,6 +57,13 @@ type Config struct {
 		Issuer   string `koanf:"issuer"`
 		Audience string `koanf:"audience"`
 	} `koanf:"jwt"`
+
+	Pricing struct {
+		BaseFee   float64 `koanf:"baseFee"`
+		PerKm     float64 `koanf:"perKm"`
+		PerKg     float64 `koanf:"perKg"`
+		PerM3     float64 `koanf:"perM3"`
+	} `koanf:"pricing"`
 }
 
 func NewConfig(ctx context.Context, configPath string) (*Config, error) {
@@ -151,6 +158,18 @@ func (c *Config) setDefaults() {
 	}
 	if c.Redis.Addr == "" {
 		c.Redis.Addr = "localhost:6379"
+	}
+	if c.Pricing.BaseFee == 0 {
+		c.Pricing.BaseFee = 500.0
+	}
+	if c.Pricing.PerKm == 0 {
+		c.Pricing.PerKm = 25.0
+	}
+	if c.Pricing.PerKg == 0 {
+		c.Pricing.PerKg = 3.0
+	}
+	if c.Pricing.PerM3 == 0 {
+		c.Pricing.PerM3 = 150.0
 	}
 }
 

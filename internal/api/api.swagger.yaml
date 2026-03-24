@@ -10,9 +10,6 @@ servers:
   - url: http://localhost:3001
     description: Local development
 
-security:
-  - BearerAuth: []
-
 components:
   securitySchemes:
     BearerAuth:
@@ -53,7 +50,7 @@ components:
 
     RegisterRequest:
       type: object
-      required: [email, password, fullName, role]
+      required: [email, password, fullName]
       properties:
         email:
           type: string
@@ -63,9 +60,6 @@ components:
           minLength: 8
         fullName:
           type: string
-        role:
-          type: string
-          enum: [admin, manager, driver, client]
 
     LoginRequest:
       type: object
@@ -323,11 +317,16 @@ components:
 
     ManagerCreate:
       type: object
-      required: [userId]
+      required: [email, password, fullName]
       properties:
-        userId:
+        email:
           type: string
-          format: uuid
+          format: email
+        password:
+          type: string
+          minLength: 8
+        fullName:
+          type: string
         warehouseId:
           type: string
           format: uuid
@@ -363,11 +362,16 @@ components:
 
     DriverCreate:
       type: object
-      required: [userId, licenseNumber, licenseExpiry]
+      required: [email, password, fullName, licenseNumber, licenseExpiry]
       properties:
-        userId:
+        email:
           type: string
-          format: uuid
+          format: email
+        password:
+          type: string
+          minLength: 8
+        fullName:
+          type: string
         vehicleId:
           type: string
           format: uuid
@@ -488,6 +492,84 @@ components:
           format: uuid
           nullable: true
 
+    # ─── Notification ─────────────────────────────────────────────────────────
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    # ─── Report ───────────────────────────────────────────────────────────────
+
+    DriverStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [available, on_route, off_duty]
+
+    # ─── Dashboard ────────────────────────────────────────────────────────────
+
+    DashboardDriverStat:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        status:
+          type: string
+          enum: [available, on_route, off_duty]
+        rating:
+          type: number
+        completedOrders:
+          type: integer
+
+    DashboardReport:
+      type: object
+      properties:
+        revenue:
+          type: object
+          properties:
+            total:
+              type: number
+            thisMonth:
+              type: number
+        orders:
+          type: object
+          properties:
+            total:
+              type: integer
+            delivered:
+              type: integer
+            inTransit:
+              type: integer
+            pending:
+              type: integer
+            cancelled:
+              type: integer
+        drivers:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardDriverStat"
+
     # ─── Route ────────────────────────────────────────────────────────────────
 
     Coordinate:
@@ -555,7 +637,8 @@ paths:
   /auth/register:
     post:
       operationId: authRegister
-      summary: Регистрация нового пользователя
+      summary: Регистрация клиента
+      description: Публичный эндпоинт — создаёт аккаунт с ролью client. Для создания менеджеров и водителей используйте POST /managers и POST /drivers (только admin).
       tags: [Auth]
       security: []
       requestBody:
@@ -705,6 +788,22 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Не авторизован
+
+  /me/trips:
+    get:
+      operationId: getMyTrips
+      summary: Поездки текущего водителя
+      tags: [Me]
+      description: Доступно только для роли driver. Возвращает маршруты, назначенные на текущего водителя.
+      responses:
+        "200":
+          description: Список маршрутов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "403":
+          description: Доступно только водителям
 
   # ─── Vehicles ───────────────────────────────────────────────────────────────
 
@@ -899,7 +998,8 @@ paths:
 
     post:
       operationId: createManager
-      summary: Назначить менеджера
+      summary: Создать менеджера
+      description: Только для роли admin. Создаёт пользователя с ролью manager и профиль менеджера в одной транзакции.
       tags: [Managers]
       requestBody:
         required: true
@@ -954,6 +1054,13 @@ paths:
       operationId: listDrivers
       summary: Список водителей
       tags: [Drivers]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [available, on_route, off_duty]
       responses:
         "200":
           description: Список водителей
@@ -964,7 +1071,8 @@ paths:
 
     post:
       operationId: createDriver
-      summary: Зарегистрировать водителя
+      summary: Создать водителя
+      description: Только для роли admin. Создаёт пользователя с ролью driver и профиль водителя в одной транзакции.
       tags: [Drivers]
       requestBody:
         required: true
@@ -1030,6 +1138,27 @@ paths:
         "200":
           description: Водитель удалён
 
+  /drivers/me/status:
+    patch:
+      operationId: updateMyDriverStatus
+      summary: Водитель меняет свой статус
+      tags: [Drivers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DriverStatusUpdate"
+      responses:
+        "200":
+          description: Статус обновлён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "403":
+          description: Доступно только водителям
+
   # ─── Orders ─────────────────────────────────────────────────────────────────
 
   /orders:
@@ -1040,6 +1169,19 @@ paths:
       description: >
         Клиент видит только свои заявки, менеджер — заявки своего склада,
         водитель — назначенные на него, администратор — все.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, assigned, in_transit, delivered, cancelled]
+        - name: driverId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
       responses:
         "200":
           description: Список заявок
@@ -1191,3 +1333,110 @@ paths:
           description: Switching Protocols — WebSocket установлен
         "404":
           description: Маршрут не найден
+
+  # ─── Notifications ───────────────────────────────────────────────────────────
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: Список уведомлений текущего пользователя
+      tags: [Notifications]
+      parameters:
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Список уведомлений
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "401":
+          description: Не авторизован
+
+  /notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    patch:
+      operationId: markNotificationRead
+      summary: Отметить уведомление как прочитанное
+      tags: [Notifications]
+      responses:
+        "200":
+          description: Отмечено
+        "404":
+          description: Не найдено
+
+  # ─── Reports ─────────────────────────────────────────────────────────────────
+
+  /reports/orders:
+    get:
+      operationId: getOrdersReport
+      summary: Отчёт по заявкам
+      tags: [Reports]
+      description: Доступно для ролей admin и manager. Возвращает агрегированные данные по завершённым заявкам за период.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, assigned, in_transit, delivered, cancelled]
+        - name: driverId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: warehouseId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Отчёт сформирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "403":
+          description: Нет доступа
+
+  /reports/dashboard:
+    get:
+      operationId: getDashboard
+      summary: Дашборд менеджмента
+      description: Доступно для ролей admin и manager. Возвращает агрегированную статистику по выручке, заявкам и водителям.
+      tags: [Reports]
+      responses:
+        "200":
+          description: Данные дашборда
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "403":
+          description: Нет доступа
