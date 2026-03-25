@@ -16,7 +16,21 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Server) ListDrivers(w http.ResponseWriter, r *http.Request, params api.ListDriversParams) {}
+func (s *Server) ListDrivers(w http.ResponseWriter, r *http.Request, params api.ListDriversParams) {
+	ctx := r.Context()
+
+	drivers, err := storage.GetAll[models.Driver](ctx, "drivers", s.DB, func(sb *sqlbuilder.SelectBuilder) {
+		if params.Status != nil {
+			sb.Where(sb.Equal("status", string(*params.Status)))
+		}
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Error while getting all drivers with that status")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, drivers, RespSuccess)
+}
 
 func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -88,14 +102,17 @@ func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	s.JSON(w, r, http.StatusCreated, driver, "driver")
+	s.JSON(w, r, http.StatusCreated, map[string]any{
+		"user":   user,
+		"driver": driver,
+	}, "driver")
 }
 
 func (s *Server) UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	claims, ok := ctx.Value("user").(*Claims)
-	if !ok {
+	if !ok || claims == nil {
 		slog.ErrorContext(ctx, "Unable to convert claims", slog.Any("claims", ctx.Value("user")))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
@@ -107,7 +124,21 @@ func (s *Server) UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := storage.Update(ctx, "drivers", models.Driver{Status: string(req.Status)}, s.DB, func(ub *sqlbuilder.UpdateBuilder) {
+	driver, err := storage.GetOne[models.Driver](ctx, s.DB, "drivers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("user_id", claims.ID))
+	})
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			slog.ErrorContext(ctx, "No driver with that user id not found", slog.String("user id", claims.ID.String()))
+			s.JSON(w, r, http.StatusNotFound, "driver not found", RespNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "Error while getting driver for update", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	driver.Status = string(req.Status)
+	if err := storage.Update(ctx, "drivers", driver, s.DB, func(ub *sqlbuilder.UpdateBuilder) {
 		ub.Where(ub.Equal("user_id", claims.ID))
 	}); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -153,12 +184,23 @@ func (s *Server) UpdateDriver(w http.ResponseWriter, r *http.Request, slug strin
 		return
 	}
 
-	driver := models.Driver{
-		LicenseNumber: *req.LicenseNumber,
-		LicenseExpiry: req.LicenseExpiry.Time,
-		Status:        string(*req.Status),
-		VehicleID:     req.VehicleId,
+	driver, err := storage.GetOne[models.Driver](ctx, s.DB, "drivers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("slug", slug))
+	})
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			slog.ErrorContext(ctx, "No driver with that slug not found", slog.String("slug", slug))
+			s.JSON(w, r, http.StatusNotFound, "driver not found", RespNotFound)
+			return
+		}
+		slog.ErrorContext(ctx, "Error while getting driver for update", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
 	}
+	driver.LicenseNumber = *req.LicenseNumber
+	driver.LicenseExpiry = req.LicenseExpiry.Time
+	driver.Status = string(*req.Status)
+	driver.VehicleID = req.VehicleId
 
 	if err := storage.Update(ctx, "drivers", driver, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.Equal("slug", slug))
