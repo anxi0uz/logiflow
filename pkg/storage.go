@@ -85,14 +85,10 @@ func GetOne[T any](ctx context.Context, db Querier, table string, opts ...func(*
 func Create[T any](ctx context.Context, table string, item T, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) error {
 	structs := sqlbuilder.NewStruct(new(T))
 
-	slog.Info("Items", slog.Any("Item", item))
-
 	sb := structs.WithoutTag("db", "-").InsertInto(table, item)
 	sb.SetFlavor(sqlbuilder.PostgreSQL)
 
 	query, args := sb.Build()
-
-	slog.Info("Query", slog.String("query", query), slog.Any("args", args))
 
 	if _, err := db.Exec(ctx, query, args...); err != nil {
 		slog.ErrorContext(ctx, "cannot create item",

@@ -314,11 +314,12 @@ type VehicleUpdateStatus string
 
 // WarehouseCreate defines model for WarehouseCreate.
 type WarehouseCreate struct {
-	Address   string   `json:"address"`
-	City      *string  `json:"city,omitempty"`
-	Latitude  *float32 `json:"latitude,omitempty"`
-	Longitude *float32 `json:"longitude,omitempty"`
-	Name      string   `json:"name"`
+	// Address Улица и номер дома
+	Address string `json:"address"`
+
+	// City Город — используется вместе с address для геокодинга
+	City string `json:"city"`
+	Name string `json:"name"`
 }
 
 // WarehouseUpdate defines model for WarehouseUpdate.
