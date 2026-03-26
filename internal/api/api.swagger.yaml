@@ -258,21 +258,16 @@ components:
 
     WarehouseCreate:
       type: object
-      required: [name, address]
+      required: [name, address, city]
       properties:
         name:
           type: string
         address:
           type: string
+          description: Улица и номер дома
         city:
           type: string
-          nullable: true
-        latitude:
-          type: number
-          nullable: true
-        longitude:
-          type: number
-          nullable: true
+          description: Город — используется вместе с address для геокодинга
 
     WarehouseUpdate:
       type: object
