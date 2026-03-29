@@ -12,6 +12,7 @@ import (
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"golang.org/x/sync/errgroup"
 )
 
 func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.ListOrdersParams) {}
@@ -31,16 +32,26 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	originLat, originLon, err := s.geocode(ctx, *req.OriginAddress)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to geocode origin", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusBadRequest, "Не удалось определить координаты адреса отправки", RespError)
-		return
-	}
-	destLat, destLon, err := s.geocode(ctx, req.DestinationAddress)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to geocode destination", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusBadRequest, "Не удалось определить координаты адреса назначения", RespError)
+	var (
+		originLat, originLon float64
+		destLat, destLon     float64
+	)
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		var err error
+		originLat, originLon, err = s.geocode(gctx, *req.OriginAddress)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		destLat, destLon, err = s.geocode(gctx, req.DestinationAddress)
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		s.JSON(w, r, http.StatusBadRequest, "Не удалось определить координаты", RespError)
 		return
 	}
 
@@ -75,14 +86,14 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	route := osrmResult.Routes[0]
 	distanceKm := route.Distance / 1000
 
-	var weightKm, volumeM3 float64
+	var weightKg, volumeM3 float64
 	if req.WeightKg != nil {
-		weightKm = float64(*req.WeightKg)
+		weightKg = float64(*req.WeightKg)
 	}
 	if req.VolumeM3 != nil {
 		volumeM3 = float64(*req.VolumeM3)
 	}
-	price := s.Config.Pricing.BaseFee + distanceKm*s.Config.Pricing.PerKg + weightKm*s.Config.Pricing.PerKg + volumeM3*s.Config.Pricing.PerM3
+	price := s.Config.Pricing.BaseFee + distanceKm*s.Config.Pricing.PerKm + weightKg*s.Config.Pricing.PerKg + volumeM3*s.Config.Pricing.PerM3
 
 	now := time.Now
 	orderID := uuid.New()
