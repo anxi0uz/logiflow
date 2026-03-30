@@ -11,6 +11,7 @@ import (
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
+	"github.com/anxi0uz/logiflow/pkg/geocode"
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/huandu/go-sqlbuilder"
@@ -38,7 +39,7 @@ func (s *Server) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fullAddress := fmt.Sprintf("%s, %s", req.City, req.Address)
-	lat, lon, err := s.geocode(ctx, fullAddress)
+	lat, lon, err := geocode.Geocode(ctx, fullAddress)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to geocode address", slog.String("address", req.Address), slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusBadRequest, "Не удалось определить координаты по адресу", RespError)

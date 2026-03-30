@@ -252,12 +252,13 @@ type ManagerCreate struct {
 
 // OrderCreate defines model for OrderCreate.
 type OrderCreate struct {
-	CargoDescription   *string             `json:"cargoDescription,omitempty"`
-	DestinationAddress string              `json:"destinationAddress"`
-	OriginAddress      *string             `json:"originAddress,omitempty"`
-	OriginWarehouseId  *openapi_types.UUID `json:"originWarehouseId,omitempty"`
-	VolumeM3           *float32            `json:"volumeM3,omitempty"`
-	WeightKg           *float32            `json:"weightKg,omitempty"`
+	CargoDescription       *string             `json:"cargoDescription,omitempty"`
+	DestinationAddress     string              `json:"destinationAddress"`
+	DestinationWarehouseId *openapi_types.UUID `json:"destinationWarehouseId,omitempty"`
+	OriginAddress          *string             `json:"originAddress,omitempty"`
+	OriginWarehouseId      *openapi_types.UUID `json:"originWarehouseId,omitempty"`
+	VolumeM3               *float32            `json:"volumeM3,omitempty"`
+	WeightKg               *float32            `json:"weightKg,omitempty"`
 }
 
 // OrderStatusUpdate defines model for OrderStatusUpdate.
