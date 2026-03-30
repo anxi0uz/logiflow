@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	neturl "net/url"
-	"strconv"
 	"time"
 
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
+	"github.com/anxi0uz/logiflow/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
@@ -49,20 +48,22 @@ type responseOptions struct {
 }
 
 type Server struct {
-	DB     *pgxpool.Pool
-	Config *config.Config
-	ctx    context.Context
-	Redis  *redis.Client
-	JwtKey []byte
+	DB          *pgxpool.Pool
+	Config      *config.Config
+	ctx         context.Context
+	Redis       *redis.Client
+	JwtKey      []byte
+	OrderSerice services.OrderService
 }
 
 func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
 	return &Server{
-		DB:     db,
-		Redis:  redis,
-		ctx:    context.Background(),
-		Config: cfg,
-		JwtKey: []byte(cfg.JwtOpt.Key),
+		DB:          db,
+		Redis:       redis,
+		ctx:         context.Background(),
+		Config:      cfg,
+		JwtKey:      []byte(cfg.JwtOpt.Key),
+		OrderSerice: *services.NewOrderService(db, *cfg),
 	}
 }
 
@@ -235,37 +236,4 @@ func (s *Server) validateAccessToken(ctx context.Context, tokenStr string) (*Cla
 	}
 
 	return claims, nil
-}
-func (s *Server) geocode(ctx context.Context, address string) (lat, lon float64, err error) {
-	url := fmt.Sprintf(
-		"https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1",
-		neturl.QueryEscape(address),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	req.Header.Set("User-Agent", "logiflow/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer resp.Body.Close()
-
-	var results []struct {
-		Lat string `json:"lat"`
-		Lon string `json:"lon"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
-		return 0, 0, err
-	}
-	if len(results) == 0 {
-		return 0, 0, fmt.Errorf("address not found: %s", address)
-	}
-
-	lat, _ = strconv.ParseFloat(results[0].Lat, 64)
-	lon, _ = strconv.ParseFloat(results[0].Lon, 64)
-	return lat, lon, nil
 }

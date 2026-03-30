@@ -474,6 +474,10 @@ components:
         volumeM3:
           type: number
           nullable: true
+        destinationWarehouseId:
+          type: string
+          format: uuid
+          nullable: true
 
     OrderStatusUpdate:
       type: object
