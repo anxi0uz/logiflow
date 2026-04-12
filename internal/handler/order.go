@@ -9,7 +9,19 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.ListOrdersParams) {}
+func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.ListOrdersParams) {
+	ctx := r.Context()
+	claims, ok := ctx.Value("user").(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while casting claims")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	switch claims.Role {
+	case "client":
+		break
+	}
+}
 
 func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

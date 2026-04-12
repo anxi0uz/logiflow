@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/anxi0uz/logiflow/internal/api"
+	api "github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
@@ -23,6 +24,8 @@ type OrderService struct {
 	db     *pgxpool.Pool
 	config config.Config
 }
+
+var ErrForbidden = errors.New("forbidden")
 
 type CreateOrderResult struct {
 	Order models.Order
@@ -70,7 +73,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 			return nil
 		}
 		var err error
-		destLat, originLon, err = geocode.Geocode(ctx, req.DestinationAddress)
+		destLat, destLon, err = geocode.Geocode(ctx, req.DestinationAddress)
 		return err
 	})
 
@@ -162,3 +165,50 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 
 	return &CreateOrderResult{Order: order, Route: routeModel}, nil
 }
+
+func (s *OrderService) ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error) {
+	var driverID *uuid.UUID
+	if role == "driver" {
+		driver, err := storage.GetOne[models.Driver](ctx, s.db, "driver", func(sb *sqlbuilder.SelectBuilder) {
+			sb.Where(sb.EQ("user_id", userID))
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get driver: %w", err)
+		}
+		driverID = &driver.ID
+	}
+	orders, err := storage.GetAll[models.Order](ctx, "orders", s.db, func(sb *sqlbuilder.SelectBuilder) {
+		switch role {
+		case "client":
+			sb.Where(sb.EQ("created_by_id", userID))
+		case "driver":
+			sb.Where(sb.EQ("driver_id", driverID))
+		default:
+			if params.Status != nil {
+				sb.Where(sb.EQ("status", params.Status))
+			}
+			if params.DriverId != nil {
+				sb.Where(sb.EQ("driver_id", params.DriverId))
+			}
+		}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list orders: %w", err)
+	}
+	return orders, nil
+}
+func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error) {
+	order, err := storage.GetOne[models.Order](ctx, s.db, "orders", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", id))
+	})
+	if err != nil {
+		return nil, err
+	}
+	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
+		return nil, ErrForbidden
+	}
+	return order, nil
+}
+func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) error
+func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderStatusUpdate) (*models.Order, error)
+func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
