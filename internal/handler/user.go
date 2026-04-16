@@ -263,9 +263,99 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 	s.JSON(w, r, http.StatusOK, user, "ok")
 }
-func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims, ok := ctx.Value("user").(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while casting claims")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
 
-func (s *Server) GetMyTrips(w http.ResponseWriter, r *http.Request) {}
+	var req api.UserUpdate
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
+		return
+	}
+
+	user, err := storage.GetOne[models.User](ctx, s.DB, "users", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", claims.ID))
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "user not found", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+
+	if req.FullName != nil {
+		user.FullName = *req.FullName
+	}
+	if req.AvatarUrl != nil {
+		user.AvatarURL = *req.AvatarUrl
+	}
+	if req.Password != nil {
+		if req.CurrentPassword == nil {
+			s.JSON(w, r, http.StatusBadRequest, "currentPassword is required", RespError)
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(*req.CurrentPassword)); err != nil {
+			s.JSON(w, r, http.StatusBadRequest, "wrong current password", RespError)
+			return
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(*req.Password), bcrypt.DefaultCost)
+		if err != nil {
+			slog.ErrorContext(ctx, "bcrypt failed", slog.String("error", err.Error()))
+			s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+			return
+		}
+		user.PasswordHash = string(hash)
+	}
+	user.UpdatedAt = time.Now()
+
+	if err := storage.Update(ctx, "users", *user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
+		sb.Where(sb.Equal("id", claims.ID))
+	}); err != nil {
+		slog.ErrorContext(ctx, "update user failed", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+
+	s.JSON(w, r, http.StatusOK, user, RespSuccess)
+}
+
+func (s *Server) GetMyTrips(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims, ok := ctx.Value("user").(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while casting claims")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if claims.Role != "driver" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
+
+	driver, err := storage.GetOne[models.Driver](ctx, s.DB, "drivers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("user_id", claims.ID))
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "error while getting driver", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+
+	orders, err := storage.GetAll[models.Order](ctx, "orders", s.DB, func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("driver_id", driver.ID))
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Error while getting orders", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, orders, RespSuccess)
+
+}
 
 func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *models.User) {
 	access, err := s.generateAccessToken(user, s.Config.RedisAccessTokenDur())

@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/xid"
 	slogchi "github.com/samber/slog-chi"
@@ -53,7 +54,7 @@ type Server struct {
 	ctx         context.Context
 	Redis       *redis.Client
 	JwtKey      []byte
-	OrderSerice services.OrderService
+	OrderSerice services.OrderServicer
 }
 
 func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
@@ -63,7 +64,7 @@ func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Serve
 		ctx:         context.Background(),
 		Config:      cfg,
 		JwtKey:      []byte(cfg.JwtOpt.Key),
-		OrderSerice: *services.NewOrderService(db, *cfg),
+		OrderSerice: services.NewOrderService(db, *cfg),
 	}
 }
 
@@ -79,7 +80,7 @@ func (s *Server) Run() error {
 	}))
 
 	r.Use(s.MiddlewareRequestID)
-
+	r.Use(s.MiddlewareMetrics)
 	r.Use(slogchi.NewWithConfig(slog.Default(), slogchi.Config{
 		DefaultLevel:     slog.LevelInfo,
 		ClientErrorLevel: slog.LevelWarn,  // 400–499 → Warn
@@ -93,6 +94,7 @@ func (s *Server) Run() error {
 	r.Use(s.AuthMiddleware)
 
 	h := api.HandlerFromMux(s, r)
+	r.Handle("/metrics", promhttp.Handler())
 
 	srv := &http.Server{
 		Handler:      h,
@@ -121,7 +123,7 @@ func (s *Server) Run() error {
 
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/auth/register" || r.URL.Path == "/auth/login" {
+		if r.URL.Path == "/auth/register" || r.URL.Path == "/auth/login" || r.URL.Path == "/metrics" {
 			next.ServeHTTP(w, r)
 			return
 		}

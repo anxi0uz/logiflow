@@ -6,6 +6,6 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: "handbooks"
+  - job_name: "logiflow"
     static_configs:
       - targets: ["app:3001"]
