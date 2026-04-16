@@ -70,6 +70,7 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 	if err := storage.Create(ctx, "users", userModel, tx); err != nil {
 		slog.ErrorContext(ctx, "Error while creating user", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		tx.Rollback(ctx)
 		return
 	}
 
@@ -83,6 +84,7 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 	if err := storage.Create(ctx, "managers", managerModel, tx); err != nil {
 		slog.ErrorContext(ctx, "Error while creating manager", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		tx.Rollback(ctx)
 		return
 	}
 

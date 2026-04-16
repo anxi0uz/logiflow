@@ -19,7 +19,7 @@ type Querier interface {
 var ErrNotFound = errors.New("not found")
 
 func GetAll[T any](ctx context.Context, table string, db Querier, opts ...func(*sqlbuilder.SelectBuilder)) ([]T, error) {
-	sb := sqlbuilder.NewStruct(new(T)).SelectFrom(table)
+	sb := sqlbuilder.NewStruct(new(T)).For(sqlbuilder.PostgreSQL).SelectFrom(table)
 
 	sb.From(table)
 
