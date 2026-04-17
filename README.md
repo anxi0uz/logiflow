@@ -247,16 +247,6 @@ Authorization: <access_token>
 
 ## Структура БД
 
-```
-users
-  ├── drivers (user_id) → vehicles
-  └── managers (user_id) → warehouses
-
-orders (created_by_id → users, driver_id → drivers, manager_id → managers)
-  └── routes (order_id) — JSONB координаты маршрута, current_index
-
-notifications (user_id → users)
-```
 ![DB Schema](docs/db.jpg)
 ## Мониторинг
 
