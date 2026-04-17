@@ -2,7 +2,7 @@
 
 Бэкенд для логистической платформы. Управление заказами на перевозку, водителями, транспортом и складами. При создании заказа строится реальный маршрут через OSRM, считается стоимость перевозки, трекинг водителя в реальном времени через WebSocket.
 
-Репозиторий: [github.com/anxi0uz/logiflow](https://github.com/anxi0uz/logiflow.git)
+Репозиторий: [github.com/anxi0uz/logiflow](https://github.com/anxi0uz/logiflow)
 
 ## Стек
 
@@ -14,29 +14,89 @@
 - **Prometheus + Grafana** — мониторинг HTTP метрик
 - **Podman** — контейнеризация
 
-## Быстрый старт
+## Запуск
 
-Создать сеть:
+### Зависимости
+
+**Linux:**
+- [Podman](https://podman.io/docs/installation) + [podman-compose](https://github.com/containers/podman-compose)
+
+```bash
+# Arch
+sudo pacman -S podman
+pip install podman-compose
+# Или
+yay -S podman-compose
+
+# Ubuntu/Debian
+sudo apt install podman
+pip install podman-compose
+```
+
+**Windows:**
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — включает docker-compose
+
+---
+
+### 1. Клонировать репозиторий
+
+```bash
+git clone https://github.com/anxi0uz/logiflow.git
+cd logiflow
+```
+
+---
+
+### 2. Заполнить `.env`
+
+В корне проекта уже есть `.env` — просто заполни значения:
+
+```env
+LOGIFLOW_DATABASE_USER=logiflow
+LOGIFLOW_DATABASE_PASSWORD=yourpassword
+LOGIFLOW_DATABASE_NAME=logiflow
+LOGIFLOW_REDIS_PASSWORD=yourredispassword
+LOGIFLOW_JWT_KEY=your-secret-jwt-key-min-32-chars
+```
+
+> `LOGIFLOW_JWT_KEY` — любая случайная строка, минимум 32 символа.
+
+---
+
+### 3. Создать сеть (только Linux / Podman)
+
 ```bash
 podman network create LogiflowNetwork
 ```
 
-Создать `.env` и заполнить:
-```bash
-LOGIFLOW_DATABASE_USER=
-LOGIFLOW_DATABASE_PASSWORD=
-LOGIFLOW_DATABASE_NAME=
-LOGIFLOW_REDIS_PASSWORD=
-LOGIFLOW_JWT_KEY=
-```
+На Windows Docker создаёт сеть автоматически — этот шаг пропускай.
 
-Поднять все сервисы:
+---
+
+### 4. Запустить
+
+**Linux (Podman):**
 ```bash
 make up        # запуск
-make build-up  # пересборка + запуск
+make build-up  # пересборка образа + запуск
 make down      # остановка
 make deploy    # pull + пересборка + запуск (для деплоя)
 ```
+
+**Windows (Docker):**
+```bat
+docker compose up -d
+docker compose build && docker compose up -d
+docker compose down
+```
+
+Миграции БД применяются **автоматически** при старте приложения — делать ничего не нужно.
+
+---
+
+### 5. Проверить
+
+Открыть в браузере `http://localhost:3001/metrics` — если страница отвечает, сервер поднят.
 
 ## Сервисы
 
@@ -197,7 +257,7 @@ orders (created_by_id → users, driver_id → drivers, manager_id → managers)
 
 notifications (user_id → users)
 ```
-
+![DB Schema](docs/db.jpg)
 ## Мониторинг
 
 Prometheus собирает метрики с `/metrics`. Grafana доступна на `localhost:3000` (admin/admin).
