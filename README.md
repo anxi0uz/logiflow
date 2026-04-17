@@ -245,6 +245,49 @@ Authorization: <access_token>
 Водитель завершает (in_transit → delivered)
 ```
 
+## Архитектура
+
+```
+cmd/
+└── main.go               — точка входа, инициализация зависимостей
+
+internal/
+├── api/                  — OpenAPI спека + сгенерированный oapi-codegen код
+├── config/               — загрузка конфига (TOML + ENV)
+├── database/             — подключение к PostgreSQL и Redis, запуск миграций
+├── handler/              — HTTP хендлеры (Chi), WebSocket хаб, Prometheus middleware
+├── models/               — структуры БД
+└── services/             — бизнес-логика (OrderService: создание заказа, статусы, дашборд)
+
+pkg/
+├── storage.go            — generic CRUD поверх pgx (GetOne, GetAll, Create, Update)
+└── geocode/              — клиенты Nominatim (геокодинг) и OSRM (маршруты)
+
+migrations/               — SQL миграции Goose, применяются автоматически при старте
+configs/                  — config.toml, prometheus.yml, datasources Grafana
+```
+
+**Слои и зависимости:**
+
+```
+HTTP-запрос
+  → Chi router
+  → Auth middleware (JWT → Redis)
+  → Handler
+  → Service (бизнес-логика, внешние API)
+  → pkg/storage (generic SQL)
+  → PostgreSQL
+```
+
+**Внешние сервисы:**
+- **Nominatim** — геокодинг адресов при создании заказа и склада
+- **OSRM** — построение маршрута и расчёт дистанции/времени
+- **Redis** — хранение access/refresh токенов, инвалидация при логауте
+- **Prometheus** — сбор метрик с `/metrics`
+- **Grafana** — дашборд метрик
+
+![Architecture scheme](docs/infra.jpg)
+
 ## Структура БД
 
 ![DB Schema](docs/db.jpg)
