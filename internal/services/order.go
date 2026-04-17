@@ -31,6 +31,7 @@ type OrderServicer interface {
 	CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) error
 	UpdateOrderStatus(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderStatusUpdate) (*models.Order, error)
 	GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
+	GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error)
 }
 
 var ErrForbidden = errors.New("forbidden")
@@ -283,9 +284,20 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, user
 		}
 		order.DriverID = req.DriverId
 		order.AssignedAt = &now
+		driver, _ := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
+			sb.Where(sb.EQ("id", order.DriverID))
+		})
+		s.createNotification(ctx, driver.UserID, "Новый заказ", "Вам назначен новый заказ")
+	}
+	if req.Status == api.OrderStatusUpdateStatusInTransit {
+		if order.CreatedByID == nil {
+			return nil, fmt.Errorf("created by id needed")
+		}
+		s.createNotification(ctx, *order.CreatedByID, "Заказ в пути", "Ваш заказ передан водителю")
 	}
 	if req.Status == api.OrderStatusUpdateStatusDelivered {
 		order.DeliveredAt = &now
+		s.createNotification(ctx, *order.CreatedByID, "Заказ доставлен", "Ваш заказ успешно доставлен")
 	}
 	if err := storage.Update(ctx, "orders", *order, s.db, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.EQ("id", id))
@@ -319,4 +331,90 @@ func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params 
 		return nil, fmt.Errorf("get orders report: %w", err)
 	}
 	return orders, nil
+}
+func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error) {
+	if role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
+
+	var report models.DashboardReport
+	g, gctx := errgroup.WithContext(ctx)
+
+	// query 1: order counts + revenue
+	g.Go(func() error {
+		row := s.db.QueryRow(gctx, `
+            SELECT
+                COUNT(*)                                                                 AS total,
+                COUNT(*) FILTER (WHERE status = 'delivered')                             AS delivered,
+                COUNT(*) FILTER (WHERE status = 'in_transit')                            AS in_transit,
+                COUNT(*) FILTER (WHERE status = 'pending')                               AS pending,
+                COUNT(*) FILTER (WHERE status = 'cancelled')                             AS cancelled,
+                COALESCE(SUM(total_price) FILTER (WHERE status = 'delivered'), 0)        AS revenue_total,
+                COALESCE(SUM(total_price) FILTER (WHERE status = 'delivered'
+                    AND created_at >= date_trunc('month', NOW())), 0)                    AS revenue_this_month
+            FROM orders
+        `)
+		return row.Scan(
+			&report.Orders.Total,
+			&report.Orders.Delivered,
+			&report.Orders.InTransit,
+			&report.Orders.Pending,
+			&report.Orders.Cancelled,
+			&report.Revenue.Total,
+			&report.Revenue.ThisMonth,
+		)
+	})
+
+	// query 2: top drivers by completed orders
+	g.Go(func() error {
+		rows, err := s.db.Query(gctx, `
+            SELECT
+                d.id,
+                u.full_name,
+                d.status,
+                d.rating,
+                COUNT(o.id) FILTER (WHERE o.status = 'delivered') AS completed_orders
+            FROM drivers d
+            JOIN users u ON u.id = d.user_id
+            LEFT JOIN orders o ON o.driver_id = d.id
+            GROUP BY d.id, u.full_name, d.status, d.rating
+            ORDER BY completed_orders DESC
+            LIMIT 10
+        `)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var ds models.DashboardDriverStat
+			if err := rows.Scan(&ds.ID, &ds.FullName, &ds.Status, &ds.Rating, &ds.CompletedOrders); err != nil {
+				return err
+			}
+			report.Drivers = append(report.Drivers, ds)
+		}
+		return rows.Err()
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	if report.Drivers == nil {
+		report.Drivers = []models.DashboardDriverStat{}
+	}
+	return &report, nil
+}
+
+func (s *OrderService) createNotification(ctx context.Context, userID uuid.UUID, title, body string) {
+	n := models.Notification{
+		ID:        uuid.New(),
+		UserID:    userID,
+		Title:     title,
+		Body:      &body,
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+	if err := storage.Create(ctx, "notifications", n, s.db); err != nil {
+		slog.ErrorContext(ctx, "failed to create notification", slog.String("error", err.Error()))
+	}
 }
