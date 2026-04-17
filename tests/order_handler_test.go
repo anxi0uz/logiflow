@@ -25,6 +25,7 @@ type mockOrderService struct {
 	cancelOrder       func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) error
 	updateOrderStatus func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderStatusUpdate) (*models.Order, error)
 	getOrdersReport   func(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
+	getDashboard      func(ctx context.Context, role string) (*models.DashboardReport, error)
 }
 
 func (m *mockOrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error) {
@@ -44,6 +45,9 @@ func (m *mockOrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, 
 }
 func (m *mockOrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
 	return m.getOrdersReport(ctx, role, params)
+}
+func (m *mockOrderService) GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error) {
+	return m.getDashboard(ctx, role)
 }
 
 // --- Helpers ---
@@ -424,6 +428,66 @@ func TestGetOrdersReport_ServiceError(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	s.GetOrdersReport(w, r, api.GetOrdersReportParams{})
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+// --- GetDashboard ---
+
+func TestGetDashboard_Success(t *testing.T) {
+	svc := &mockOrderService{
+		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+			return &models.DashboardReport{
+				Revenue: models.DashboardRevenue{Total: 10000, ThisMonth: 3000},
+				Orders:  models.DashboardOrderStatus{Total: 5, Delivered: 3, Pending: 2},
+				Drivers: []models.DashboardDriverStat{},
+			}, nil
+		},
+	}
+	s := newTestServer(svc)
+	r := httptest.NewRequest(http.MethodGet, "/reports/dashboard", nil)
+	r = withClaims(r, uuid.New(), "manager")
+	w := httptest.NewRecorder()
+
+	s.GetDashboard(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestGetDashboard_Forbidden(t *testing.T) {
+	svc := &mockOrderService{
+		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+			return nil, services.ErrForbidden
+		},
+	}
+	s := newTestServer(svc)
+	r := httptest.NewRequest(http.MethodGet, "/reports/dashboard", nil)
+	r = withClaims(r, uuid.New(), "client")
+	w := httptest.NewRecorder()
+
+	s.GetDashboard(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestGetDashboard_ServiceError(t *testing.T) {
+	svc := &mockOrderService{
+		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+			return nil, errors.New("db error")
+		},
+	}
+	s := newTestServer(svc)
+	r := httptest.NewRequest(http.MethodGet, "/reports/dashboard", nil)
+	r = withClaims(r, uuid.New(), "manager")
+	w := httptest.NewRecorder()
+
+	s.GetDashboard(w, r)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", w.Code)

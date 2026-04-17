@@ -55,6 +55,7 @@ type Server struct {
 	Redis       *redis.Client
 	JwtKey      []byte
 	OrderSerice services.OrderServicer
+	Hub         *Hub
 }
 
 func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
@@ -65,6 +66,7 @@ func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Serve
 		Config:      cfg,
 		JwtKey:      []byte(cfg.JwtOpt.Key),
 		OrderSerice: services.NewOrderService(db, *cfg),
+		Hub:         NewHub(),
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/anxi0uz/logiflow/internal/services"
 	storage "github.com/anxi0uz/logiflow/pkg"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"github.com/xuri/excelize/v2"
 )
 
 func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.ListOrdersParams) {
@@ -135,6 +136,9 @@ func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id op
 		}
 		return
 	}
+	if req.Status == api.OrderStatusUpdateStatusInTransit {
+		go s.startRouteTracker(id)
+	}
 	s.JSON(w, r, http.StatusOK, order, RespSuccess)
 }
 
@@ -157,7 +161,64 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	s.JSON(w, r, http.StatusOK, orders, RespSuccess)
+
+	f := excelize.NewFile()
+	sheet := "Orders"
+	f.SetSheetName("Sheet1", sheet)
+
+	headers := []string{"ID", "Status", "Origin", "Destination", "Weight", "Volume", "Price", "Created At"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, cell, h)
+	}
+
+	for row, o := range orders {
+		values := []any{
+			o.ID.String(),
+			o.Status,
+			o.OriginAddress,
+			o.DestinationAddress,
+			o.WeightKg,
+			o.VolumeM3,
+			o.TotalPrice,
+			o.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+		for col, v := range values {
+			cell, _ := excelize.CoordinatesToCellName(col+1, row+2)
+			f.SetCellValue(sheet, cell, v)
+		}
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		slog.ErrorContext(ctx, "excel write failed", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=orders_report.xlsx")
+	w.WriteHeader(http.StatusOK)
+	w.Write(buf.Bytes())
 }
 
-func (s *Server) GetDashboard(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) GetDashboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims, ok := ctx.Value("user").(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "error while casting claims")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+
+	report, err := s.OrderSerice.GetDashboard(ctx, claims.Role)
+	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+			return
+		}
+		slog.ErrorContext(ctx, "dashboard failed", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, report, RespSuccess)
+}
