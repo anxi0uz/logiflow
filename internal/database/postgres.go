@@ -37,9 +37,11 @@ func RunMigrations(ctx context.Context, dbURL string) error {
 	if err != nil {
 		return fmt.Errorf("не удалось открыть соединение для миграций: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
-	goose.SetDialect(gooseDriverName)
+	if err := goose.SetDialect(gooseDriverName); err != nil {
+		return fmt.Errorf("goose dialect: %w", err)
+	}
 
 	statusErr := goose.Status(db, migrationsDir)
 	if statusErr != nil {

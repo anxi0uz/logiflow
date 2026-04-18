@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +35,12 @@ func (s *Server) ListDrivers(w http.ResponseWriter, r *http.Request, params api.
 
 func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok {
+		slog.ErrorContext(ctx, "Error while casting claims")
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
 	if claims.Role != "admin" {
 		slog.WarnContext(ctx, "unusual try from not allowed role", slog.String("Role", claims.Role), slog.String("id", claims.ID.String()))
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
@@ -72,7 +78,11 @@ func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
+	}()
 
 	if err := storage.Create(ctx, "users", user, tx); err != nil {
 		slog.ErrorContext(ctx, "Unable to create user", slog.String("error", err.Error()), slog.Any("user", user))
@@ -111,9 +121,9 @@ func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UpdateMyDriverStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok || claims == nil {
-		slog.ErrorContext(ctx, "Unable to convert claims", slog.Any("claims", ctx.Value("user")))
+		slog.ErrorContext(ctx, "Unable to convert claims", slog.Any("claims", ctx.Value(UserKey)))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}

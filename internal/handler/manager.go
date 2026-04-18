@@ -12,6 +12,7 @@ import (
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -65,12 +66,18 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
+	}()
 
 	if err := storage.Create(ctx, "users", userModel, tx); err != nil {
 		slog.ErrorContext(ctx, "Error while creating user", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		tx.Rollback(ctx)
+		if err := tx.Rollback(ctx); err != nil {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
 		return
 	}
 
@@ -84,7 +91,9 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 	if err := storage.Create(ctx, "managers", managerModel, tx); err != nil {
 		slog.ErrorContext(ctx, "Error while creating manager", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		tx.Rollback(ctx)
+		if err := tx.Rollback(ctx); err != nil {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
 		return
 	}
 

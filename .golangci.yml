@@ -1,0 +1,12 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - unused
+  exclusions:
+    rules:
+      - linters: [staticcheck]
+        text: "SA1029"

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -43,7 +44,9 @@ func (h *Hub) Broadcast(orderID uuid.UUID, msg any) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for _, conn := range h.connections[orderID] {
-		conn.WriteJSON(msg)
+		if err := conn.WriteJSON(msg); err != nil {
+			slog.Error("error while writing json to clients", slog.String("error", err.Error()))
+		}
 	}
 }
 

@@ -39,7 +39,11 @@ func (s *Server) RouteWebSocket(w http.ResponseWriter, r *http.Request, id opena
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Warn("ws conn close error", slog.String("error", err.Error()))
+		}
+	}()
 
 	orderID := id
 	s.Hub.Register(id, conn)
@@ -58,10 +62,12 @@ func (s *Server) RouteWebSocket(w http.ResponseWriter, r *http.Request, id opena
 	if err == nil {
 		coords, err := route.ParseCoordinates()
 		if err == nil && route.CurrentIndex < len(coords) {
-			conn.WriteJSON(map[string]any{
+			if err := conn.WriteJSON(map[string]any{
 				"current_index": route.CurrentIndex,
 				"coordinate":    coords[route.CurrentIndex],
-			})
+			}); err != nil {
+				slog.ErrorContext(ctx, "error while writing date to clients", slog.String("error", err.Error()))
+			}
 		}
 	}
 
@@ -102,9 +108,11 @@ func (s *Server) startRouteTracker(orderID uuid.UUID) {
 					"coordinate":    coords[route.CurrentIndex],
 				})
 				route.CurrentIndex++
-				storage.Update(ctx, "routes", *route, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
+				if err := storage.Update(ctx, "routes", *route, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 					sb.Where(sb.EQ("order_id", orderID))
-				})
+				}); err != nil {
+					slog.ErrorContext(ctx, "error while updating route", slog.String("id", route.ID.String()), slog.String("error", err.Error()))
+				}
 			}
 		}
 	})

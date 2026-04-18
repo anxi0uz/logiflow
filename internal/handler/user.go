@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -54,9 +55,13 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
-	err = storage.Update(ctx, "users", user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
+	if err := storage.Update(ctx, "users", user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.Equal("id", user.ID))
-	})
+	}); err != nil {
+		slog.ErrorContext(ctx, "Failed to update user", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
 	s.issueTokens(w, r, user)
 }
 
@@ -93,6 +98,8 @@ func (s *Server) AuthLogout(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
+	s.deleteRefreshCookie(w)
+	s.JSON(w, r, http.StatusOK, "Logged out", RespSuccess)
 }
 func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -113,7 +120,7 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	claimsValue := ctx.Value("user")
+	claimsValue := ctx.Value(UserKey)
 
 	claims, ok := claimsValue.(*Claims)
 
@@ -181,7 +188,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	claimsValue := ctx.Value("user")
+	claimsValue := ctx.Value(UserKey)
 	claims, ok := claimsValue.(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
@@ -195,7 +202,11 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
+	}()
 
 	err = storage.Delete[models.User](ctx, "users", tx, func(sb *sqlbuilder.DeleteBuilder) {
 		sb.Where(sb.Equal("id", userID))
@@ -242,7 +253,7 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	claimsValue := ctx.Value("user")
+	claimsValue := ctx.Value(UserKey)
 	claims, ok := claimsValue.(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while converting claims", slog.Any("claims", claimsValue))
@@ -265,7 +276,7 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -325,7 +336,7 @@ func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) GetMyTrips(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)

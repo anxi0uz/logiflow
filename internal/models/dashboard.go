@@ -8,9 +8,9 @@ type DashboardRevenue struct {
 }
 
 type DashboardOrderStatus struct {
-	Total     int `json:"total`
+	Total     int `json:"total"`
 	Delivered int `json:"delivered"`
-	InTransit int `json:"inTransit`
+	InTransit int `json:"inTransit"`
 	Pending   int `json:"pending"`
 	Cancelled int `json:"cancelled"`
 }
