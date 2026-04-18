@@ -15,7 +15,7 @@ import (
 
 func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.ListOrdersParams) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -32,7 +32,7 @@ func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.L
 
 func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -60,7 +60,7 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -86,7 +86,7 @@ func (s *Server) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_typ
 
 func (s *Server) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -111,7 +111,7 @@ func (s *Server) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_
 
 func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -123,6 +123,7 @@ func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id op
 		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}
+
 	order, err := s.OrderSerice.UpdateOrderStatus(ctx, id, claims.ID, claims.Role, req)
 	if err != nil {
 		switch {
@@ -136,15 +137,17 @@ func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id op
 		}
 		return
 	}
+
 	if req.Status == api.OrderStatusUpdateStatusInTransit {
 		go s.startRouteTracker(id)
 	}
+
 	s.JSON(w, r, http.StatusOK, order, RespSuccess)
 }
 
 func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params api.GetOrdersReportParams) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -164,12 +167,12 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 
 	f := excelize.NewFile()
 	sheet := "Orders"
-	f.SetSheetName("Sheet1", sheet)
+	f.SetSheetName("Sheet1", sheet) //nolint:errcheck
 
 	headers := []string{"ID", "Status", "Origin", "Destination", "Weight", "Volume", "Price", "Created At"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheet, cell, h)
+		f.SetCellValue(sheet, cell, h) //nolint:errcheck
 	}
 
 	for row, o := range orders {
@@ -185,7 +188,7 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 		}
 		for col, v := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, row+2)
-			f.SetCellValue(sheet, cell, v)
+			f.SetCellValue(sheet, cell, v) //nolint:errcheck
 		}
 	}
 	buf, err := f.WriteToBuffer()
@@ -198,12 +201,12 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", "attachment; filename=orders_report.xlsx")
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf.Bytes())
+	w.Write(buf.Bytes()) //nolint:errcheck
 }
 
 func (s *Server) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)

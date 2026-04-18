@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -54,7 +56,11 @@ func main() {
 		slog.ErrorContext(ctx, "Ошибка подключения к redis", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	defer redis.Close()
+	defer func() {
+		if err := redis.Close(); err != nil {
+			slog.Warn("redis close error", slog.String("error", err.Error()))
+		}
+	}()
 
 	if err := database.RunMigrations(ctx, cfg.DatabaseURL()); err != nil {
 		slog.ErrorContext(ctx, "Ошибка миграций", slog.String("error", err.Error()))
@@ -77,6 +83,10 @@ func main() {
 		os.Exit(1)
 	}
 	cancel()
+
+	if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("Ошибка при остановке сервера", "error", err.Error())
+	}
 
 	slog.Info("Приложение остановлено")
 }

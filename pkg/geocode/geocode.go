@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	neturl "net/url"
 	"strconv"
@@ -35,7 +36,11 @@ func Geocode(ctx context.Context, address string) (lat, lon float64, err error) 
 	if err != nil {
 		return 0, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Warn("failed to close response body", slog.String("error", err.Error()))
+		}
+	}()
 
 	var results []struct {
 		Lat string `json:"lat"`

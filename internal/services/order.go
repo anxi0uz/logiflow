@@ -16,6 +16,7 @@ import (
 	"github.com/anxi0uz/logiflow/pkg/geocode"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 )
@@ -102,7 +103,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 	if err != nil {
 		return nil, fmt.Errorf("osrm request: %w", err)
 	}
-	defer osrmResp.Body.Close()
+	defer func() {
+		if err := osrmResp.Body.Close(); err != nil {
+			slog.Warn("failed to close response body", slog.String("error", err.Error()))
+		}
+	}()
 
 	var osrmResult geocode.OsrmResult
 	if err := json.NewDecoder(osrmResp.Body).Decode(&osrmResult); err != nil || len(osrmResult.Routes) == 0 {
@@ -154,6 +159,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		OrderID:     orderID,
 		Coordinates: coordsJSON,
 		DurationSec: int(route.Duration),
+		DistanceKm:  distanceKm,
 		Status:      "pending",
 	}
 
@@ -161,7 +167,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			slog.ErrorContext(ctx, "tx rollback failed", slog.String("error", err.Error()))
+		}
+	}()
 
 	if err := storage.Create(ctx, "orders", order, tx); err != nil {
 		return nil, fmt.Errorf("create order: %w", err)
@@ -284,20 +294,28 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, user
 		}
 		order.DriverID = req.DriverId
 		order.AssignedAt = &now
-		driver, _ := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
+		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
 			sb.Where(sb.EQ("id", order.DriverID))
 		})
+		if err != nil {
+			slog.ErrorContext(ctx, "error while getting driver", slog.String("error", err.Error()))
+			return nil, fmt.Errorf("update order status: %w", err)
+		}
 		s.createNotification(ctx, driver.UserID, "Новый заказ", "Вам назначен новый заказ")
 	}
 	if req.Status == api.OrderStatusUpdateStatusInTransit {
 		if order.CreatedByID == nil {
 			return nil, fmt.Errorf("created by id needed")
 		}
-		s.createNotification(ctx, *order.CreatedByID, "Заказ в пути", "Ваш заказ передан водителю")
+		if order.CreatedByID != nil {
+			s.createNotification(ctx, *order.CreatedByID, "Заказ в пути", "Ваш заказ передан водителю")
+		}
 	}
 	if req.Status == api.OrderStatusUpdateStatusDelivered {
 		order.DeliveredAt = &now
-		s.createNotification(ctx, *order.CreatedByID, "Заказ доставлен", "Ваш заказ успешно доставлен")
+		if order.CreatedByID != nil {
+			s.createNotification(ctx, *order.CreatedByID, "Заказ доставлен", "Ваш заказ успешно доставлен")
+		}
 	}
 	if err := storage.Update(ctx, "orders", *order, s.db, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.EQ("id", id))

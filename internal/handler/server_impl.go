@@ -28,6 +28,7 @@ type ctxKey string
 const (
 	requestIDKey ctxKey = "X-Request-ID"
 	tokenKey     ctxKey = "Authorization"
+	UserKey      ctxKey = "user"
 
 	// response messages
 	MsgInternalError = "Internal server error"
@@ -145,7 +146,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "user", claims)
+		ctx := context.WithValue(r.Context(), UserKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

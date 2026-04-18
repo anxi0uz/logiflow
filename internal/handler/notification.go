@@ -13,7 +13,7 @@ import (
 
 func (s *Server) ListNotifications(w http.ResponseWriter, r *http.Request, params api.ListNotificationsParams) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -36,7 +36,7 @@ func (s *Server) ListNotifications(w http.ResponseWriter, r *http.Request, param
 
 func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("user").(*Claims)
+	claims, ok := ctx.Value(UserKey).(*Claims)
 	if !ok {
 		slog.ErrorContext(ctx, "Error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
@@ -49,6 +49,10 @@ func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id
 	if err != nil {
 		slog.ErrorContext(ctx, "Error while getting notification", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if notification == nil {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
 		return
 	}
 	if notification.UserID != claims.ID {

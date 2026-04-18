@@ -60,7 +60,7 @@ func newTestServer(svc services.OrderServicer) *handler.Server {
 
 func withClaims(r *http.Request, id uuid.UUID, role string) *http.Request {
 	claims := &handler.Claims{ID: id, Role: role}
-	ctx := context.WithValue(r.Context(), "user", claims)
+	ctx := context.WithValue(r.Context(), handler.UserKey, claims)
 	return r.WithContext(ctx)
 }
 
