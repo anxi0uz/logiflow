@@ -65,7 +65,7 @@ func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 		ID:           userid,
 		Slug:         s.GenerateUserSlug(req.FullName, userid),
 		CreatedAt:    now,
-		UpdatedAt:    now,
+		UpdatedAt:    &now,
 		Role:         "driver",
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),

@@ -53,7 +53,7 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 		ID:           userid,
 		Slug:         s.GenerateUserSlug(req.FullName, userid),
 		CreatedAt:    now,
-		UpdatedAt:    now,
+		UpdatedAt:    &now,
 		Role:         "manager",
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),

@@ -54,7 +54,7 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	user.LastLoginAt = &now
-	user.UpdatedAt = now
+	user.UpdatedAt = &now
 	if err := storage.Update(ctx, "users", user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.Equal("id", user.ID))
 	}); err != nil {
@@ -171,7 +171,7 @@ func (s *Server) AuthRegister(w http.ResponseWriter, r *http.Request) {
 		ID:           uuid,
 		Slug:         s.GenerateUserSlug(req.FullName, uuid),
 		CreatedAt:    now,
-		UpdatedAt:    now,
+		UpdatedAt:    &now,
 		Role:         "client",
 		Email:        string(req.Email),
 		PasswordHash: string(passwordHash),
@@ -302,7 +302,7 @@ func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		user.FullName = *req.FullName
 	}
 	if req.AvatarUrl != nil {
-		user.AvatarURL = *req.AvatarUrl
+		user.AvatarURL = req.AvatarUrl
 	}
 	if req.Password != nil {
 		if req.CurrentPassword == nil {
@@ -321,7 +321,8 @@ func (s *Server) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		}
 		user.PasswordHash = string(hash)
 	}
-	user.UpdatedAt = time.Now()
+	t := time.Now()
+	user.UpdatedAt = &t
 
 	if err := storage.Update(ctx, "users", *user, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.Equal("id", claims.ID))
