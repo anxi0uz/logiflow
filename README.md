@@ -106,6 +106,25 @@ docker compose down
 
 Открыть в браузере `http://localhost:3001/metrics` — если страница отвечает, сервер поднят.
 
+## Тестовые данные
+
+Миграция `20260502120000_seed_test_data.sql` заполняет БД тестовыми данными автоматически при старте. Все пароли — `1`.
+
+| Email | Пароль | Роль | Имя |
+|---|---|---|---|
+| `admin@logiflow.ru` | `1` | admin | Александр Петров |
+| `manager.anna@logiflow.ru` | `1` | manager | Анна Смирнова (склад Москва) |
+| `manager.igor@logiflow.ru` | `1` | manager | Игорь Козлов (склад СПб) |
+| `driver.mikhail@logiflow.ru` | `1` | driver | Михаил Соколов — Газель Next, available |
+| `driver.dmitry@logiflow.ru` | `1` | driver | Дмитрий Новиков — MAN TGX, on_trip |
+| `driver.sergey@logiflow.ru` | `1` | driver | Сергей Волков — Ford Transit, available |
+| `kate@example.com` | `1` | client | Екатерина Морозова |
+| `alexey@example.com` | `1` | client | Алексей Попов |
+
+Также создаются 3 склада (Москва, СПб, Новосибирск), 3 машины, 5 заказов во всех статусах (`pending`, `assigned`, `in_transit`, `delivered`, `cancelled`) с реальными OSRM-маршрутами.
+
+---
+
 ## Сервисы
 
 | Сервис | Адрес |
