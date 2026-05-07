@@ -2,10 +2,15 @@
 
 Бэкенд для логистической платформы. Управление заказами на перевозку, водителями, транспортом и складами. При создании заказа строится реальный маршрут через OSRM, считается стоимость перевозки, трекинг водителя в реальном времени через WebSocket.
 
-Репозиторий: [github.com/anxi0uz/logiflow](https://github.com/anxi0uz/logiflow)
+- **Backend:** [github.com/anxi0uz/logiflow](https://github.com/anxi0uz/logiflow)
+- **Frontend:** [github.com/siers22/logiflow-frontend](https://github.com/siers22/logiflow-frontend)
+- **Демо:** [logiflowadvanced.online](https://logiflowadvanced.online)
+
+> Демо развёрнуто в Kubernetes (k3s).
 
 ## Стек
 
+**Backend:**
 - **Go 1.25** — Chi v5, oapi-codegen, pgx/v5, go-redis, errgroup
 - **PostgreSQL** — миграции через Goose
 - **Redis** — хранение JWT access/refresh токенов
@@ -13,6 +18,9 @@
 - **OSRM** — построение маршрутов и расчёт дистанции
 - **Prometheus + Grafana** — мониторинг HTTP метрик
 - **Podman** — контейнеризация
+
+**Frontend:**
+- Репозиторий: [github.com/siers22/logiflow-frontend](https://github.com/siers22/logiflow-frontend)
 
 ## Запуск
 
@@ -291,6 +299,7 @@ HTTP-запрос
 ## Структура БД
 
 ![DB Schema](docs/db.jpg)
+
 ## Мониторинг
 
 Prometheus собирает метрики с `/metrics`. Grafana доступна на `localhost:3000` (admin/admin).
