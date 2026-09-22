@@ -1,6 +1,6 @@
 # Logiflow
 
-Бэкенд для логистической платформы. Управление заказами на перевозку, водителями, транспортом и складами. При создании заказа строится реальный маршрут через OSRM, считается стоимость перевозки, трекинг водителя в реальном времени через WebSocket.
+Бэкенд для логистической платформы. Управление заказами на перевозку, назначениями водителей и транспорта, складами и маршрутами. При создании заказа строится маршрут через OSRM и рассчитывается стоимость перевозки. Текущий WebSocket-трекинг является демонстрационной симуляцией движения по маршруту.
 
 - **Backend:** [github.com/anxi0uz/logiflow](https://github.com/anxi0uz/logiflow)
 - **Frontend:** [github.com/siers22/logiflow-frontend](https://github.com/siers22/logiflow-frontend)
@@ -104,24 +104,13 @@ docker compose down
 
 ### 5. Проверить
 
-Открыть в браузере `http://localhost:3001/metrics` — если страница отвечает, сервер поднят.
+Проверить liveness приложения:
 
-## Тестовые данные
+```bash
+curl http://localhost:3001/health/live
+```
 
-Миграция `20260502120000_seed_test_data.sql` заполняет БД тестовыми данными автоматически при старте. Все пароли — `1`.
-
-| Email | Пароль | Роль | Имя |
-|---|---|---|---|
-| `admin@logiflow.ru` | `1` | admin | Александр Петров |
-| `manager.anna@logiflow.ru` | `1` | manager | Анна Смирнова (склад Москва) |
-| `manager.igor@logiflow.ru` | `1` | manager | Игорь Козлов (склад СПб) |
-| `driver.mikhail@logiflow.ru` | `1` | driver | Михаил Соколов — Газель Next, available |
-| `driver.dmitry@logiflow.ru` | `1` | driver | Дмитрий Новиков — MAN TGX, on_trip |
-| `driver.sergey@logiflow.ru` | `1` | driver | Сергей Волков — Ford Transit, available |
-| `kate@example.com` | `1` | client | Екатерина Морозова |
-| `alexey@example.com` | `1` | client | Алексей Попов |
-
-Также создаются 3 склада (Москва, СПб, Новосибирск), 3 машины, 5 заказов во всех статусах (`pending`, `assigned`, `in_transit`, `delivered`, `cancelled`) с реальными OSRM-маршрутами.
+`/health/ready` дополнительно проверяет соединения с PostgreSQL и Redis, `/metrics` отдаёт метрики Prometheus.
 
 ---
 
@@ -133,6 +122,8 @@ docker compose down
 | Grafana | `http://localhost:3000` |
 | Prometheus | `http://localhost:9090` |
 | Метрики | `http://localhost:3001/metrics` |
+| Liveness | `http://localhost:3001/health/live` |
+| Readiness | `http://localhost:3001/health/ready` |
 
 ## Конфигурация
 
@@ -166,9 +157,9 @@ total = baseFee + distance_km * perKm + weight_kg * perKg + volume_m3 * perM3
 
 | Роль | Возможности |
 |---|---|
-| `client` | Создаёт и отменяет свои заказы, следит за статусом |
-| `driver` | Меняет свой статус, видит назначенные заказы, двигает статус in_transit/delivered |
-| `manager` | Назначает водителей на заказы, управляет статусами, смотрит отчёты |
+| `client` | Создаёт, отправляет на диспетчеризацию и отменяет свои заказы, следит за статусом |
+| `driver` | Принимает или отклоняет назначение, начинает перевозку, подтверждает прибытие и доставку |
+| `manager` | Назначает водителя и транспорт, переназначает ресурсы, отменяет заказы, смотрит отчёты |
 | `admin` | Создаёт профили водителей, видит всё |
 
 Клиенты регистрируются через `POST /auth/register`. Роль назначается вручную в БД. Водителей создаёт `admin`, менеджеров — авторизованный пользователь.
@@ -178,7 +169,7 @@ total = baseFee + distance_km * perKm + weight_kg * perKg + volume_m3 * perM3
 JWT (HS256) + refresh токены. Access токен живёт 24 часа, refresh — 7 дней в HTTP-only cookie. Оба хранятся в Redis — при логауте удаляются.
 
 ```
-Authorization: <access_token>
+Authorization: Bearer <access_token>
 ```
 
 ## API
@@ -202,13 +193,24 @@ Authorization: <access_token>
 ### Заказы
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/orders` | Список заказов (по роли) |
-| POST | `/orders` | Создать заказ |
-| GET | `/orders/{id}` | Получить заказ |
-| DELETE | `/orders/{id}` | Отменить заказ |
-| PATCH | `/orders/{id}/status` | Обновить статус |
+| GET | `/api/v1/orders` | Список заказов (по роли) |
+| POST | `/api/v1/orders` | Создать заказ |
+| GET | `/api/v1/orders/{id}` | Получить заказ |
+| POST | `/api/v1/orders/{id}/submit` | Подготовить заказ к диспетчеризации |
+| POST | `/api/v1/orders/{id}/cancel` | Отменить заказ |
+| PATCH | `/orders/{id}/status` | Устаревшая ручка, всегда возвращает `410 Gone` |
 | GET | `/orders/{id}/route` | Маршрут заказа |
 | GET | `/orders/{id}/route/ws` | WebSocket трекинг |
+
+### Назначения
+| Метод | Путь | Описание |
+|---|---|---|
+| POST | `/api/v1/orders/{id}/assignments` | Предложить водителя и транспорт |
+| POST | `/api/v1/assignments/{id}/accept` | Принять назначение |
+| POST | `/api/v1/assignments/{id}/reject` | Отклонить назначение |
+| POST | `/api/v1/assignments/{id}/start` | Начать перевозку |
+| POST | `/api/v1/assignments/{id}/arrive` | Подтвердить прибытие |
+| POST | `/api/v1/assignments/{id}/complete` | Подтвердить доставку |
 
 ### Водители
 | Метод | Путь | Описание |
@@ -261,16 +263,22 @@ Authorization: <access_token>
 ## Флоу заказа
 
 ```
-Клиент создаёт заказ (адреса → Nominatim → координаты → OSRM → маршрут)
+Клиент создаёт черновик заказа (draft)
   ↓
-Менеджер назначает водителя (pending → assigned)
+Клиент отправляет заказ на диспетчеризацию (ready_for_dispatch)
   ↓
-Водитель начинает поездку (assigned → in_transit)
+Менеджер предлагает Driver + Vehicle (Assignment pending_acceptance)
   ↓
-Трекинг по WebSocket — current_index двигается по массиву координат
+Водитель принимает назначение (Order assigned, Assignment accepted)
   ↓
-Водитель завершает (in_transit → delivered)
+Водитель начинает перевозку (in_transit / active)
+  ↓
+Водитель подтверждает прибытие (arrived)
+  ↓
+Водитель или менеджер подтверждает доставку (completed)
 ```
+
+`completed` и `cancelled` — терминальные состояния. Занятость водителя и транспорта определяется открытыми Assignment с пересекающимся временным окном, а не ручным переключением `available`.
 
 ## Архитектура
 
@@ -284,7 +292,7 @@ internal/
 ├── database/             — подключение к PostgreSQL и Redis, запуск миграций
 ├── handler/              — HTTP хендлеры (Chi), WebSocket хаб, Prometheus middleware
 ├── models/               — структуры БД
-└── services/             — бизнес-логика (OrderService: создание заказа, статусы, дашборд)
+└── services/             — бизнес-логика заказов, назначений, eligibility и отчётов
 
 pkg/
 ├── storage.go            — generic CRUD поверх pgx (GetOne, GetAll, Create, Update)
@@ -332,8 +340,23 @@ Datasource Grafana: `configs/datasources/`
 
 ## Тесты
 
-Юнит тесты хендлеров через `httptest` без реальной БД:
+Обычный прогон включает domain-, handler- и HTTP smoke-тесты. Интеграционные тесты автоматически пропускаются без переменных окружения:
 
 ```bash
-go test ./tests/...
+go test ./...
+```
+
+Проверка Core на настоящей PostgreSQL, включая полный lifecycle и конкурентное назначение одного ресурса:
+
+```bash
+LOGIFLOW_TEST_DATABASE_URL='postgres://user:password@localhost:5432/logiflow_test?sslmode=disable' \
+go test ./internal/services -run TestCoreLifecycleAndConcurrentReservation -count=1 -v
+```
+
+Проверка refresh-token rotation требует PostgreSQL и отдельную тестовую Redis:
+
+```bash
+LOGIFLOW_TEST_DATABASE_URL='postgres://user:password@localhost:5432/logiflow_test?sslmode=disable' \
+LOGIFLOW_TEST_REDIS_ADDR='localhost:6379' \
+go test ./internal/handler -run TestRefreshTokenIdentifiesUserAndRotates -count=1 -v
 ```

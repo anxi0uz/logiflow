@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/anxi0uz/logiflow/internal/api"
@@ -59,11 +60,11 @@ type Server struct {
 	Hub         *Hub
 }
 
-func NewServer(db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
+func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
 	return &Server{
 		DB:          db,
 		Redis:       redis,
-		ctx:         context.Background(),
+		ctx:         ctx,
 		Config:      cfg,
 		JwtKey:      []byte(cfg.JwtOpt.Key),
 		OrderSerice: services.NewOrderService(db, *cfg),
@@ -95,6 +96,20 @@ func (s *Server) Run() error {
 	}))
 
 	r.Use(s.AuthMiddleware)
+	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		s.JSON(w, r, http.StatusOK, "ok", "health")
+	})
+	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.DB.Ping(r.Context()); err != nil {
+			s.JSON(w, r, http.StatusServiceUnavailable, "postgres unavailable", RespError)
+			return
+		}
+		if err := s.Redis.Ping(r.Context()).Err(); err != nil {
+			s.JSON(w, r, http.StatusServiceUnavailable, "redis unavailable", RespError)
+			return
+		}
+		s.JSON(w, r, http.StatusOK, "ready", "health")
+	})
 
 	h := api.HandlerFromMux(s, r)
 	r.Handle("/metrics", promhttp.Handler())
@@ -107,15 +122,19 @@ func (s *Server) Run() error {
 		WriteTimeout: s.Config.WriteTimeout(),
 	}
 
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("HTTP сервер упал", "error", err)
-		}
-	}()
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- srv.ListenAndServe() }()
 
 	slog.Info("Приложение запущено успешно ", slog.String("URL", s.Config.ServerURL()))
 
-	<-s.ctx.Done()
+	select {
+	case <-s.ctx.Done():
+	case err := <-serverErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
 
 	slog.Info("Остановка HTTP сервера...")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -126,14 +145,19 @@ func (s *Server) Run() error {
 
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/auth/register" || r.URL.Path == "/auth/login" || r.URL.Path == "/metrics" {
+		if r.URL.Path == "/auth/register" || r.URL.Path == "/auth/login" || r.URL.Path == "/auth/refresh" || r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/health/") {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		tokenStr := r.Header.Get("Authorization")
-		if tokenStr == "" {
+		authorization := r.Header.Get("Authorization")
+		if authorization == "" {
 			s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
+			return
+		}
+		tokenStr, ok := strings.CutPrefix(authorization, "Bearer ")
+		if !ok || strings.TrimSpace(tokenStr) == "" {
+			s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 			return
 		}
 
@@ -141,12 +165,13 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		claims, err := s.validateAccessToken(r.Context(), tokenStr)
 		if err != nil {
-			slog.WarnContext(r.Context(), "Токен не прошел валидацию", slog.String("Token", tokenStr), slog.String("error", err.Error()))
+			slog.WarnContext(r.Context(), "Токен не прошел валидацию", slog.String("error", err.Error()))
 			s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 			return
 		}
 
 		ctx := context.WithValue(r.Context(), UserKey, claims)
+		ctx = context.WithValue(ctx, tokenKey, tokenStr)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

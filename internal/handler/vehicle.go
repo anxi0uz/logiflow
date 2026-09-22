@@ -41,6 +41,7 @@ func (s *Server) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 		PlateNumber: req.PlateNumber,
 		Slug:        slug.Make(req.PlateNumber),
+		Status:      "available",
 	}
 
 	if req.Brand != nil {

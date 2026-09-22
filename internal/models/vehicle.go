@@ -1,6 +1,10 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Vehicle struct {
 	ID          uuid.UUID `db:"id"`
@@ -12,4 +16,14 @@ type Vehicle struct {
 	CapacityM3  float64   `db:"capacity_m3"`
 	Status      string    `db:"status"` // available, in_transit, maintenance
 	Slug        string    `db:"slug"`
+}
+
+type VehicleDocument struct {
+	ID         uuid.UUID `db:"id"`
+	VehicleID  uuid.UUID `db:"vehicle_id"`
+	Type       string    `db:"type"`
+	Number     string    `db:"number"`
+	ValidUntil time.Time `db:"valid_until"`
+	Status     string    `db:"status"`
+	CreatedAt  time.Time `db:"created_at"`
 }

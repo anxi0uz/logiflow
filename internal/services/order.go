@@ -29,14 +29,19 @@ type OrderServicer interface {
 	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*CreateOrderResult, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
 	GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
-	CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) error
-	UpdateOrderStatus(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderStatusUpdate) (*models.Order, error)
+	SubmitOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
+	CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderCancel) (*models.Order, error)
+	CreateAssignment(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string, req api.AssignmentCreate) (*models.Assignment, error)
+	AcceptAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	RejectAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.AssignmentReject) (*models.Assignment, error)
+	StartAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	ArriveAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	CompleteAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
 	GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
 	GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error)
 }
 
-var ErrForbidden = errors.New("forbidden")
-var ErrCannotCancel = errors.New("cant cancel")
+var ErrCannotCancel = ErrInvalidOrderTransition
 
 type CreateOrderResult struct {
 	Order models.Order
@@ -133,9 +138,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		ID:                 orderID,
 		CreatedByID:        &userID,
 		DestinationAddress: req.DestinationAddress,
-		Status:             "pending",
+		Status:             models.OrderDraft,
 		TotalPrice:         price,
 		CreatedAt:          time.Now(),
+		PickupFrom:         req.PickupFrom,
+		PickupTo:           req.PickupTo,
 	}
 	if req.OriginAddress != nil && *req.OriginAddress != "" {
 		order.OriginAddress = *req.OriginAddress
@@ -234,96 +241,6 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 
 	return order, nil
 }
-func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) error {
-	order, err := storage.GetOne[models.Order](ctx, s.db, "orders", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", id))
-	})
-	if err != nil {
-		return err
-	}
-
-	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
-		return ErrForbidden
-	}
-
-	if order.Status != "pending" {
-		return ErrCannotCancel
-	}
-
-	order.Status = "cancelled"
-	if err := storage.Update(ctx, "orders", order, s.db, func(sb *sqlbuilder.UpdateBuilder) {
-		sb.Where(sb.EQ("id", id))
-	}); err != nil {
-		return err
-	}
-	return nil
-}
-func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderStatusUpdate) (*models.Order, error) {
-	if role == "client" {
-		return nil, ErrForbidden
-	}
-
-	order, err := storage.GetOne[models.Order](ctx, s.db, "orders", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", id))
-	})
-	if err != nil {
-		return nil, err
-	}
-	if role == "driver" {
-		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
-			sb.Where(sb.EQ("user_id", userID))
-		})
-		if err != nil {
-			return nil, fmt.Errorf("get driver: %w", err)
-		}
-		if order.DriverID == nil || *order.DriverID != driver.ID {
-			return nil, ErrForbidden
-		}
-		if req.Status != api.OrderStatusUpdateStatusInTransit && req.Status != api.OrderStatusUpdateStatusDelivered {
-			return nil, ErrForbidden
-		}
-	}
-	if !req.Status.Valid() {
-		return nil, fmt.Errorf("invalid status: %s", req.Status)
-	}
-	now := time.Now()
-	order.Status = string(req.Status)
-	if req.Status == api.OrderStatusUpdateStatusAssigned {
-		if req.DriverId == nil {
-			return nil, fmt.Errorf("driverId required when assigned")
-		}
-		order.DriverID = req.DriverId
-		order.AssignedAt = &now
-		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
-			sb.Where(sb.EQ("id", order.DriverID))
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "error while getting driver", slog.String("error", err.Error()))
-			return nil, fmt.Errorf("update order status: %w", err)
-		}
-		s.createNotification(ctx, driver.UserID, "Новый заказ", "Вам назначен новый заказ")
-	}
-	if req.Status == api.OrderStatusUpdateStatusInTransit {
-		if order.CreatedByID == nil {
-			return nil, fmt.Errorf("created by id needed")
-		}
-		if order.CreatedByID != nil {
-			s.createNotification(ctx, *order.CreatedByID, "Заказ в пути", "Ваш заказ передан водителю")
-		}
-	}
-	if req.Status == api.OrderStatusUpdateStatusDelivered {
-		order.DeliveredAt = &now
-		if order.CreatedByID != nil {
-			s.createNotification(ctx, *order.CreatedByID, "Заказ доставлен", "Ваш заказ успешно доставлен")
-		}
-	}
-	if err := storage.Update(ctx, "orders", *order, s.db, func(sb *sqlbuilder.UpdateBuilder) {
-		sb.Where(sb.EQ("id", id))
-	}); err != nil {
-		return nil, fmt.Errorf("update order: %w", err)
-	}
-	return order, nil
-}
 func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
 	if role != "manager" {
 		return nil, ErrForbidden
@@ -363,12 +280,12 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
 		row := s.db.QueryRow(gctx, `
             SELECT
                 COUNT(*)                                                                 AS total,
-                COUNT(*) FILTER (WHERE status = 'delivered')                             AS delivered,
+                COUNT(*) FILTER (WHERE status = 'completed')                             AS delivered,
                 COUNT(*) FILTER (WHERE status = 'in_transit')                            AS in_transit,
-                COUNT(*) FILTER (WHERE status = 'pending')                               AS pending,
+                COUNT(*) FILTER (WHERE status IN ('draft', 'ready_for_dispatch'))         AS pending,
                 COUNT(*) FILTER (WHERE status = 'cancelled')                             AS cancelled,
-                COALESCE(SUM(total_price) FILTER (WHERE status = 'delivered'), 0)        AS revenue_total,
-                COALESCE(SUM(total_price) FILTER (WHERE status = 'delivered'
+                COALESCE(SUM(total_price) FILTER (WHERE status = 'completed'), 0)        AS revenue_total,
+                COALESCE(SUM(total_price) FILTER (WHERE status = 'completed'
                     AND created_at >= date_trunc('month', NOW())), 0)                    AS revenue_this_month
             FROM orders
         `)
@@ -391,7 +308,7 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
                 u.full_name,
                 d.status,
                 d.rating,
-                COUNT(o.id) FILTER (WHERE o.status = 'delivered') AS completed_orders
+                COUNT(o.id) FILTER (WHERE o.status = 'completed') AS completed_orders
             FROM drivers d
             JOIN users u ON u.id = d.user_id
             LEFT JOIN orders o ON o.driver_id = d.id

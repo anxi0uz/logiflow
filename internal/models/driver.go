@@ -16,3 +16,13 @@ type Driver struct {
 	Slug          string     `db:"slug"`
 	Status        string     `db:"status"` // available, on_route, off_duty
 }
+
+type DriverDocument struct {
+	ID         uuid.UUID `db:"id"`
+	DriverID   uuid.UUID `db:"driver_id"`
+	Type       string    `db:"type"`
+	Number     string    `db:"number"`
+	ValidUntil time.Time `db:"valid_until"`
+	Status     string    `db:"status"`
+	CreatedAt  time.Time `db:"created_at"`
+}

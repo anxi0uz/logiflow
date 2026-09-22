@@ -72,7 +72,7 @@ func main() {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		serverErr <- handler.NewServer(connectionPool, redis, cfg).Run()
+		serverErr <- handler.NewServer(ctx, connectionPool, redis, cfg).Run()
 	}()
 
 	select {

@@ -6,11 +6,30 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for AssignmentCreateSource.
+const (
+	DispatchRecommendation AssignmentCreateSource = "dispatch_recommendation"
+	Manual                 AssignmentCreateSource = "manual"
+)
+
+// Valid indicates whether the value is a known member of the AssignmentCreateSource enum.
+func (e AssignmentCreateSource) Valid() bool {
+	switch e {
+	case DispatchRecommendation:
+		return true
+	case Manual:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for DriverStatusUpdateStatus.
 const (
@@ -48,30 +67,6 @@ func (e DriverUpdateStatus) Valid() bool {
 	case DriverUpdateStatusOffDuty:
 		return true
 	case DriverUpdateStatusOnRoute:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for OrderStatusUpdateStatus.
-const (
-	OrderStatusUpdateStatusAssigned  OrderStatusUpdateStatus = "assigned"
-	OrderStatusUpdateStatusCancelled OrderStatusUpdateStatus = "cancelled"
-	OrderStatusUpdateStatusDelivered OrderStatusUpdateStatus = "delivered"
-	OrderStatusUpdateStatusInTransit OrderStatusUpdateStatus = "in_transit"
-)
-
-// Valid indicates whether the value is a known member of the OrderStatusUpdateStatus enum.
-func (e OrderStatusUpdateStatus) Valid() bool {
-	switch e {
-	case OrderStatusUpdateStatusAssigned:
-		return true
-	case OrderStatusUpdateStatusCancelled:
-		return true
-	case OrderStatusUpdateStatusDelivered:
-		return true
-	case OrderStatusUpdateStatusInTransit:
 		return true
 	default:
 		return false
@@ -117,6 +112,39 @@ func (e WarehouseUpdateStatus) Valid() bool {
 	}
 }
 
+// Defines values for ListOrdersParamsStatus.
+const (
+	ListOrdersParamsStatusArrived          ListOrdersParamsStatus = "arrived"
+	ListOrdersParamsStatusAssigned         ListOrdersParamsStatus = "assigned"
+	ListOrdersParamsStatusCancelled        ListOrdersParamsStatus = "cancelled"
+	ListOrdersParamsStatusCompleted        ListOrdersParamsStatus = "completed"
+	ListOrdersParamsStatusDraft            ListOrdersParamsStatus = "draft"
+	ListOrdersParamsStatusInTransit        ListOrdersParamsStatus = "in_transit"
+	ListOrdersParamsStatusReadyForDispatch ListOrdersParamsStatus = "ready_for_dispatch"
+)
+
+// Valid indicates whether the value is a known member of the ListOrdersParamsStatus enum.
+func (e ListOrdersParamsStatus) Valid() bool {
+	switch e {
+	case ListOrdersParamsStatusArrived:
+		return true
+	case ListOrdersParamsStatusAssigned:
+		return true
+	case ListOrdersParamsStatusCancelled:
+		return true
+	case ListOrdersParamsStatusCompleted:
+		return true
+	case ListOrdersParamsStatusDraft:
+		return true
+	case ListOrdersParamsStatusInTransit:
+		return true
+	case ListOrdersParamsStatusReadyForDispatch:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListDriversParamsStatus.
 const (
 	Available ListDriversParamsStatus = "available"
@@ -138,54 +166,33 @@ func (e ListDriversParamsStatus) Valid() bool {
 	}
 }
 
-// Defines values for ListOrdersParamsStatus.
-const (
-	ListOrdersParamsStatusAssigned  ListOrdersParamsStatus = "assigned"
-	ListOrdersParamsStatusCancelled ListOrdersParamsStatus = "cancelled"
-	ListOrdersParamsStatusDelivered ListOrdersParamsStatus = "delivered"
-	ListOrdersParamsStatusInTransit ListOrdersParamsStatus = "in_transit"
-	ListOrdersParamsStatusPending   ListOrdersParamsStatus = "pending"
-)
-
-// Valid indicates whether the value is a known member of the ListOrdersParamsStatus enum.
-func (e ListOrdersParamsStatus) Valid() bool {
-	switch e {
-	case ListOrdersParamsStatusAssigned:
-		return true
-	case ListOrdersParamsStatusCancelled:
-		return true
-	case ListOrdersParamsStatusDelivered:
-		return true
-	case ListOrdersParamsStatusInTransit:
-		return true
-	case ListOrdersParamsStatusPending:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for GetOrdersReportParamsStatus.
 const (
-	GetOrdersReportParamsStatusAssigned  GetOrdersReportParamsStatus = "assigned"
-	GetOrdersReportParamsStatusCancelled GetOrdersReportParamsStatus = "cancelled"
-	GetOrdersReportParamsStatusDelivered GetOrdersReportParamsStatus = "delivered"
-	GetOrdersReportParamsStatusInTransit GetOrdersReportParamsStatus = "in_transit"
-	GetOrdersReportParamsStatusPending   GetOrdersReportParamsStatus = "pending"
+	Arrived          GetOrdersReportParamsStatus = "arrived"
+	Assigned         GetOrdersReportParamsStatus = "assigned"
+	Cancelled        GetOrdersReportParamsStatus = "cancelled"
+	Completed        GetOrdersReportParamsStatus = "completed"
+	Draft            GetOrdersReportParamsStatus = "draft"
+	InTransit        GetOrdersReportParamsStatus = "in_transit"
+	ReadyForDispatch GetOrdersReportParamsStatus = "ready_for_dispatch"
 )
 
 // Valid indicates whether the value is a known member of the GetOrdersReportParamsStatus enum.
 func (e GetOrdersReportParamsStatus) Valid() bool {
 	switch e {
-	case GetOrdersReportParamsStatusAssigned:
+	case Arrived:
 		return true
-	case GetOrdersReportParamsStatusCancelled:
+	case Assigned:
 		return true
-	case GetOrdersReportParamsStatusDelivered:
+	case Cancelled:
 		return true
-	case GetOrdersReportParamsStatusInTransit:
+	case Completed:
 		return true
-	case GetOrdersReportParamsStatusPending:
+	case Draft:
+		return true
+	case InTransit:
+		return true
+	case ReadyForDispatch:
 		return true
 	default:
 		return false
@@ -198,6 +205,33 @@ type ApiResponse struct {
 	RequestID *string                 `json:"requestID,omitempty"`
 	Status    *int                    `json:"status,omitempty"`
 	Success   *bool                   `json:"success,omitempty"`
+}
+
+// AssignmentCreate defines model for AssignmentCreate.
+type AssignmentCreate struct {
+	DriverId                openapi_types.UUID      `json:"driverId"`
+	PlannedFrom             time.Time               `json:"plannedFrom"`
+	PlannedTo               time.Time               `json:"plannedTo"`
+	RecommendationCreatedAt *time.Time              `json:"recommendationCreatedAt,omitempty"`
+	RecommendationId        *string                 `json:"recommendationId,omitempty"`
+	ReplacesAssignmentId    *openapi_types.UUID     `json:"replacesAssignmentId,omitempty"`
+	Source                  *AssignmentCreateSource `json:"source,omitempty"`
+	VehicleId               openapi_types.UUID      `json:"vehicleId"`
+}
+
+// AssignmentCreateSource defines model for AssignmentCreate.Source.
+type AssignmentCreateSource string
+
+// AssignmentReject defines model for AssignmentReject.
+type AssignmentReject struct {
+	Comment    *string `json:"comment,omitempty"`
+	ReasonCode string  `json:"reasonCode"`
+}
+
+// DeliveryComplete defines model for DeliveryComplete.
+type DeliveryComplete struct {
+	Comment       *string `json:"comment,omitempty"`
+	RecipientName *string `json:"recipientName,omitempty"`
 }
 
 // DriverCreate defines model for DriverCreate.
@@ -250,6 +284,12 @@ type ManagerCreate struct {
 	WarehouseId *openapi_types.UUID `json:"warehouseId,omitempty"`
 }
 
+// OrderCancel defines model for OrderCancel.
+type OrderCancel struct {
+	Comment    *string `json:"comment,omitempty"`
+	ReasonCode *string `json:"reasonCode,omitempty"`
+}
+
 // OrderCreate defines model for OrderCreate.
 type OrderCreate struct {
 	CargoDescription       *string             `json:"cargoDescription,omitempty"`
@@ -257,18 +297,11 @@ type OrderCreate struct {
 	DestinationWarehouseId *openapi_types.UUID `json:"destinationWarehouseId,omitempty"`
 	OriginAddress          *string             `json:"originAddress,omitempty"`
 	OriginWarehouseId      *openapi_types.UUID `json:"originWarehouseId,omitempty"`
+	PickupFrom             *time.Time          `json:"pickupFrom,omitempty"`
+	PickupTo               *time.Time          `json:"pickupTo,omitempty"`
 	VolumeM3               *float32            `json:"volumeM3,omitempty"`
 	WeightKg               *float32            `json:"weightKg,omitempty"`
 }
-
-// OrderStatusUpdate defines model for OrderStatusUpdate.
-type OrderStatusUpdate struct {
-	DriverId *openapi_types.UUID     `json:"driverId,omitempty"`
-	Status   OrderStatusUpdateStatus `json:"status"`
-}
-
-// OrderStatusUpdateStatus defines model for OrderStatusUpdate.Status.
-type OrderStatusUpdateStatus string
 
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
@@ -336,6 +369,15 @@ type WarehouseUpdate struct {
 // WarehouseUpdateStatus defines model for WarehouseUpdate.Status.
 type WarehouseUpdateStatus string
 
+// ListOrdersParams defines parameters for ListOrders.
+type ListOrdersParams struct {
+	Status   *ListOrdersParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	DriverId *openapi_types.UUID     `form:"driverId,omitempty" json:"driverId,omitempty"`
+}
+
+// ListOrdersParamsStatus defines parameters for ListOrders.
+type ListOrdersParamsStatus string
+
 // ListDriversParams defines parameters for ListDrivers.
 type ListDriversParams struct {
 	Status *ListDriversParamsStatus `form:"status,omitempty" json:"status,omitempty"`
@@ -349,15 +391,6 @@ type ListNotificationsParams struct {
 	UnreadOnly *bool `form:"unreadOnly,omitempty" json:"unreadOnly,omitempty"`
 }
 
-// ListOrdersParams defines parameters for ListOrders.
-type ListOrdersParams struct {
-	Status   *ListOrdersParamsStatus `form:"status,omitempty" json:"status,omitempty"`
-	DriverId *openapi_types.UUID     `form:"driverId,omitempty" json:"driverId,omitempty"`
-}
-
-// ListOrdersParamsStatus defines parameters for ListOrders.
-type ListOrdersParamsStatus string
-
 // GetOrdersReportParams defines parameters for GetOrdersReport.
 type GetOrdersReportParams struct {
 	From        *openapi_types.Date          `form:"from,omitempty" json:"from,omitempty"`
@@ -369,6 +402,21 @@ type GetOrdersReportParams struct {
 
 // GetOrdersReportParamsStatus defines parameters for GetOrdersReport.
 type GetOrdersReportParamsStatus string
+
+// CompleteAssignmentJSONRequestBody defines body for CompleteAssignment for application/json ContentType.
+type CompleteAssignmentJSONRequestBody = DeliveryComplete
+
+// RejectAssignmentJSONRequestBody defines body for RejectAssignment for application/json ContentType.
+type RejectAssignmentJSONRequestBody = AssignmentReject
+
+// CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
+type CreateOrderJSONRequestBody = OrderCreate
+
+// CreateAssignmentJSONRequestBody defines body for CreateAssignment for application/json ContentType.
+type CreateAssignmentJSONRequestBody = AssignmentCreate
+
+// CancelOrderJSONRequestBody defines body for CancelOrder for application/json ContentType.
+type CancelOrderJSONRequestBody = OrderCancel
 
 // AuthLoginJSONRequestBody defines body for AuthLogin for application/json ContentType.
 type AuthLoginJSONRequestBody = LoginRequest
@@ -394,12 +442,6 @@ type DeleteMeJSONRequestBody = UserDeleteRequest
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UserUpdate
 
-// CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
-type CreateOrderJSONRequestBody = OrderCreate
-
-// UpdateOrderStatusJSONRequestBody defines body for UpdateOrderStatus for application/json ContentType.
-type UpdateOrderStatusJSONRequestBody = OrderStatusUpdate
-
 // CreateVehicleJSONRequestBody defines body for CreateVehicle for application/json ContentType.
 type CreateVehicleJSONRequestBody = VehicleCreate
 
@@ -414,6 +456,39 @@ type UpdateWarehouseJSONRequestBody = WarehouseUpdate
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Принять назначение
+	// (POST /api/v1/assignments/{id}/accept)
+	AcceptAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Подтвердить прибытие
+	// (POST /api/v1/assignments/{id}/arrive)
+	ArriveAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Подтвердить доставку
+	// (POST /api/v1/assignments/{id}/complete)
+	CompleteAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Отклонить назначение
+	// (POST /api/v1/assignments/{id}/reject)
+	RejectAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Начать перевозку
+	// (POST /api/v1/assignments/{id}/start)
+	StartAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Список заявок
+	// (GET /api/v1/orders)
+	ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams)
+	// Создать заявку
+	// (POST /api/v1/orders)
+	CreateOrder(w http.ResponseWriter, r *http.Request)
+	// Получить заявку
+	// (GET /api/v1/orders/{id})
+	GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Предложить или заменить назначение
+	// (POST /api/v1/orders/{id}/assignments)
+	CreateAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Отменить заказ
+	// (POST /api/v1/orders/{id}/cancel)
+	CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Подготовить заказ к диспетчеризации
+	// (POST /api/v1/orders/{id}/submit)
+	SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Авторизация
 	// (POST /auth/login)
 	AuthLogin(w http.ResponseWriter, r *http.Request)
@@ -474,25 +549,13 @@ type ServerInterface interface {
 	// Отметить уведомление как прочитанное
 	// (PATCH /notifications/{id}/read)
 	MarkNotificationRead(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Список заявок
-	// (GET /orders)
-	ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams)
-	// Создать заявку
-	// (POST /orders)
-	CreateOrder(w http.ResponseWriter, r *http.Request)
-	// Отменить заявку
-	// (DELETE /orders/{id})
-	CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Получить заявку
-	// (GET /orders/{id})
-	GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Получить маршрут заявки
 	// (GET /orders/{id}/route)
 	GetRoute(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// WebSocket трекинг маршрута
 	// (GET /orders/{id}/route/ws)
 	RouteWebSocket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Обновить статус заявки
+	// Устаревшее универсальное обновление статуса
 	// (PATCH /orders/{id}/status)
 	UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Дашборд менеджмента
@@ -536,6 +599,72 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Принять назначение
+// (POST /api/v1/assignments/{id}/accept)
+func (_ Unimplemented) AcceptAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Подтвердить прибытие
+// (POST /api/v1/assignments/{id}/arrive)
+func (_ Unimplemented) ArriveAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Подтвердить доставку
+// (POST /api/v1/assignments/{id}/complete)
+func (_ Unimplemented) CompleteAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Отклонить назначение
+// (POST /api/v1/assignments/{id}/reject)
+func (_ Unimplemented) RejectAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Начать перевозку
+// (POST /api/v1/assignments/{id}/start)
+func (_ Unimplemented) StartAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Список заявок
+// (GET /api/v1/orders)
+func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Создать заявку
+// (POST /api/v1/orders)
+func (_ Unimplemented) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить заявку
+// (GET /api/v1/orders/{id})
+func (_ Unimplemented) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Предложить или заменить назначение
+// (POST /api/v1/orders/{id}/assignments)
+func (_ Unimplemented) CreateAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Отменить заказ
+// (POST /api/v1/orders/{id}/cancel)
+func (_ Unimplemented) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Подготовить заказ к диспетчеризации
+// (POST /api/v1/orders/{id}/submit)
+func (_ Unimplemented) SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Авторизация
 // (POST /auth/login)
@@ -657,30 +786,6 @@ func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Список заявок
-// (GET /orders)
-func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Создать заявку
-// (POST /orders)
-func (_ Unimplemented) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Отменить заявку
-// (DELETE /orders/{id})
-func (_ Unimplemented) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// Получить заявку
-// (GET /orders/{id})
-func (_ Unimplemented) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // Получить маршрут заявки
 // (GET /orders/{id}/route)
 func (_ Unimplemented) GetRoute(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
@@ -693,7 +798,7 @@ func (_ Unimplemented) RouteWebSocket(w http.ResponseWriter, r *http.Request, id
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Обновить статус заявки
+// Устаревшее универсальное обновление статуса
 // (PATCH /orders/{id}/status)
 func (_ Unimplemented) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -779,6 +884,280 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// AcceptAssignment operation middleware
+func (siw *ServerInterfaceWrapper) AcceptAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArriveAssignment operation middleware
+func (siw *ServerInterfaceWrapper) ArriveAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArriveAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteAssignment operation middleware
+func (siw *ServerInterfaceWrapper) CompleteAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectAssignment operation middleware
+func (siw *ServerInterfaceWrapper) RejectAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartAssignment operation middleware
+func (siw *ServerInterfaceWrapper) StartAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrders operation middleware
+func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListOrdersParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "driverId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "driverId", r.URL.Query(), &params.DriverId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "driverId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrder operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrder(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrder operation middleware
+func (siw *ServerInterfaceWrapper) GetOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAssignment operation middleware
+func (siw *ServerInterfaceWrapper) CreateAssignment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelOrder operation middleware
+func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SubmitOrder operation middleware
+func (siw *ServerInterfaceWrapper) SubmitOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // AuthLogin operation middleware
 func (siw *ServerInterfaceWrapper) AuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -1143,105 +1522,6 @@ func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MarkNotificationRead(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListOrders operation middleware
-func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListOrdersParams
-
-	// ------------- Optional query parameter "status" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "driverId" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "driverId", r.URL.Query(), &params.DriverId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "driverId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListOrders(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateOrder operation middleware
-func (siw *ServerInterfaceWrapper) CreateOrder(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateOrder(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CancelOrder operation middleware
-func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CancelOrder(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetOrder operation middleware
-func (siw *ServerInterfaceWrapper) GetOrder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetOrder(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1719,6 +1999,39 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/assignments/{id}/accept", wrapper.AcceptAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/assignments/{id}/arrive", wrapper.ArriveAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/assignments/{id}/complete", wrapper.CompleteAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/assignments/{id}/reject", wrapper.RejectAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/assignments/{id}/start", wrapper.StartAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders", wrapper.ListOrders)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders", wrapper.CreateOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}", wrapper.GetOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/assignments", wrapper.CreateAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/cancel", wrapper.CancelOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/submit", wrapper.SubmitOrder)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.AuthLogin)
 	})
 	r.Group(func(r chi.Router) {
@@ -1777,18 +2090,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/notifications/{id}/read", wrapper.MarkNotificationRead)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/orders", wrapper.ListOrders)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/orders", wrapper.CreateOrder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Delete(options.BaseURL+"/orders/{id}", wrapper.CancelOrder)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/orders/{id}", wrapper.GetOrder)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/orders/{id}/route", wrapper.GetRoute)

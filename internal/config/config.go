@@ -59,10 +59,10 @@ type Config struct {
 	} `koanf:"jwt"`
 
 	Pricing struct {
-		BaseFee   float64 `koanf:"baseFee"`
-		PerKm     float64 `koanf:"perKm"`
-		PerKg     float64 `koanf:"perKg"`
-		PerM3     float64 `koanf:"perM3"`
+		BaseFee float64 `koanf:"baseFee"`
+		PerKm   float64 `koanf:"perKm"`
+		PerKg   float64 `koanf:"perKg"`
+		PerM3   float64 `koanf:"perM3"`
 	} `koanf:"pricing"`
 }
 
@@ -73,17 +73,16 @@ func NewConfig(ctx context.Context, configPath string) (*Config, error) {
 
 	k := koanf.New(".")
 
-	if err := k.Load(env.Provider("LOGIFLOW_", ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "LOGIFLOW_")), "_", ".")
-	}), nil); err != nil {
-		return nil, fmt.Errorf("ошибка загрузки ENV: %w", err)
-	}
-
 	if err := k.Load(file.Provider(configPath), toml.Parser()); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("не удалось прочитать config.toml: %w", err)
 		}
 		slog.InfoContext(ctx, "config.toml не найден — используем только ENV и дефолты")
+	}
+	if err := k.Load(env.Provider("LOGIFLOW_", ".", func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "LOGIFLOW_")), "_", ".")
+	}), nil); err != nil {
+		return nil, fmt.Errorf("ошибка загрузки ENV: %w", err)
 	}
 
 	var cfg Config

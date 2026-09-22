@@ -436,13 +436,21 @@ components:
           nullable: true
         status:
           type: string
-          enum: [pending, assigned, in_transit, delivered, cancelled]
+          enum: [draft, ready_for_dispatch, assigned, in_transit, arrived, completed, cancelled]
         totalPrice:
           type: number
           nullable: true
         createdAt:
           type: string
           format: date-time
+        pickupFrom:
+          type: string
+          format: date-time
+          nullable: true
+        pickupTo:
+          type: string
+          format: date-time
+          nullable: true
         assignedAt:
           type: string
           format: date-time
@@ -478,17 +486,75 @@ components:
           type: string
           format: uuid
           nullable: true
-
-    OrderStatusUpdate:
-      type: object
-      required: [status]
-      properties:
-        status:
+        pickupFrom:
           type: string
-          enum: [assigned, in_transit, delivered, cancelled]
+          format: date-time
+          nullable: true
+        pickupTo:
+          type: string
+          format: date-time
+          nullable: true
+
+    AssignmentCreate:
+      type: object
+      required: [driverId, vehicleId, plannedFrom, plannedTo]
+      properties:
         driverId:
           type: string
           format: uuid
+        vehicleId:
+          type: string
+          format: uuid
+        plannedFrom:
+          type: string
+          format: date-time
+        plannedTo:
+          type: string
+          format: date-time
+        replacesAssignmentId:
+          type: string
+          format: uuid
+          nullable: true
+        source:
+          type: string
+          enum: [manual, dispatch_recommendation]
+          default: manual
+        recommendationId:
+          type: string
+          nullable: true
+        recommendationCreatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AssignmentReject:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode:
+          type: string
+        comment:
+          type: string
+          nullable: true
+
+    DeliveryComplete:
+      type: object
+      properties:
+        recipientName:
+          type: string
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+
+    OrderCancel:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+          nullable: true
+        comment:
+          type: string
           nullable: true
 
     # ─── Notification ─────────────────────────────────────────────────────────
@@ -577,7 +643,7 @@ components:
         type: number
       minItems: 2
       maxItems: 2
-      description: "[longitude, latitude] — ORS format"
+      description: "[longitude, latitude] — GeoJSON format"
 
     Route:
       type: object
@@ -596,7 +662,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Coordinate"
-          description: Массив координат маршрута от ORS
+          description: Массив координат маршрута от OSRM
         currentIndex:
           type: integer
           description: Текущая позиция водителя в массиве координат
@@ -1160,7 +1226,7 @@ paths:
 
   # ─── Orders ─────────────────────────────────────────────────────────────────
 
-  /orders:
+  /api/v1/orders:
     get:
       operationId: listOrders
       summary: Список заявок
@@ -1174,7 +1240,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, assigned, in_transit, delivered, cancelled]
+            enum: [draft, ready_for_dispatch, assigned, in_transit, arrived, completed, cancelled]
         - name: driverId
           in: query
           required: false
@@ -1194,7 +1260,7 @@ paths:
       summary: Создать заявку
       tags: [Orders]
       description: >
-        Создаёт заявку и запрашивает маршрут в OpenRouteService по адресам.
+        Создаёт черновик заявки, геокодирует адреса через Nominatim и строит маршрут через OSRM.
         Координаты сохраняются в таблице routes.
       requestBody:
         required: true
@@ -1203,20 +1269,20 @@ paths:
             schema:
               $ref: "#/components/schemas/OrderCreate"
       responses:
-        "200":
+        "201":
           description: Заявка создана
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiResponse"
         "400":
-          description: Некорректные данные или ORS недоступен
+          description: Некорректные данные или сервис маршрутизации недоступен
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /orders/{id}:
+  /api/v1/orders/{id}:
     parameters:
       - name: id
         in: path
@@ -1239,18 +1305,132 @@ paths:
         "404":
           description: Не найдено
 
-    delete:
-      operationId: cancelOrder
-      summary: Отменить заявку
+  /api/v1/orders/{id}/submit:
+    post:
+      operationId: submitOrder
+      summary: Подготовить заказ к диспетчеризации
       tags: [Orders]
-      description: Доступно только для статуса pending.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       responses:
-        "200":
-          description: Заявка отменена
-        "400":
-          description: Нельзя отменить заявку в текущем статусе
-        "403":
-          description: Нет доступа
+        "200": { description: Заказ готов к диспетчеризации }
+        "409": { description: Недопустимый переход }
+
+  /api/v1/orders/{id}/cancel:
+    post:
+      operationId: cancelOrder
+      summary: Отменить заказ
+      tags: [Orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderCancel" }
+      responses:
+        "200": { description: Заказ отменён }
+        "409": { description: Заказ нельзя отменить }
+
+  /api/v1/orders/{id}/assignments:
+    post:
+      operationId: createAssignment
+      summary: Предложить или заменить назначение
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssignmentCreate" }
+      responses:
+        "201": { description: Назначение создано }
+        "409": { description: Ресурс занят или состояние изменилось }
+
+  /api/v1/assignments/{id}/accept:
+    post:
+      operationId: acceptAssignment
+      summary: Принять назначение
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Назначение принято }
+
+  /api/v1/assignments/{id}/reject:
+    post:
+      operationId: rejectAssignment
+      summary: Отклонить назначение
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssignmentReject" }
+      responses:
+        "200": { description: Назначение отклонено }
+
+  /api/v1/assignments/{id}/start:
+    post:
+      operationId: startAssignment
+      summary: Начать перевозку
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Перевозка началась }
+
+  /api/v1/assignments/{id}/arrive:
+    post:
+      operationId: arriveAssignment
+      summary: Подтвердить прибытие
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Прибытие подтверждено }
+
+  /api/v1/assignments/{id}/complete:
+    post:
+      operationId: completeAssignment
+      summary: Подтвердить доставку
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryComplete" }
+      responses:
+        "200": { description: Доставка завершена }
 
   /orders/{id}/status:
     parameters:
@@ -1263,26 +1443,17 @@ paths:
 
     patch:
       operationId: updateOrderStatus
-      summary: Обновить статус заявки
+      summary: Устаревшее универсальное обновление статуса
       tags: [Orders]
-      description: Менеджер назначает водителя (assigned), водитель обновляет (in_transit / delivered).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OrderStatusUpdate"
+      deprecated: true
+      description: Всегда возвращает 410. Используйте явные команды `/api/v1/orders/...` и `/api/v1/assignments/...`.
       responses:
-        "200":
-          description: Статус обновлён
+        "410":
+          description: Универсальное изменение статуса удалено
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiResponse"
-        "400":
-          description: Недопустимый переход статуса
-        "403":
-          description: Нет доступа
 
   # ─── Routes ─────────────────────────────────────────────────────────────────
 
@@ -1401,7 +1572,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, assigned, in_transit, delivered, cancelled]
+            enum: [draft, ready_for_dispatch, assigned, in_transit, arrived, completed, cancelled]
         - name: driverId
           in: query
           required: false

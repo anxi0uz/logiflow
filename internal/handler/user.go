@@ -81,20 +81,20 @@ func (s *Server) AuthLogout(w http.ResponseWriter, r *http.Request) {
 
 	refreshKey := "refresh_token:" + refreshStr
 	if err := s.Redis.Del(ctx, refreshKey).Err(); err != nil {
-		slog.ErrorContext(ctx, "Error while removing refresh token from redis", slog.String("token", refreshStr), slog.String("error", err.Error()))
+		slog.ErrorContext(ctx, "Error while removing refresh token from redis", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 
-	tokenStr := r.Header.Get("Authorization")
-	if tokenStr == "" {
+	tokenStr, ok := ctx.Value(tokenKey).(string)
+	if !ok || tokenStr == "" {
 		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
 		return
 	}
 
 	tokenKey := "access_token:" + tokenStr
 	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
-		slog.ErrorContext(ctx, "Error while removing access token from redis", slog.String("token", tokenStr), slog.String("error", err.Error()))
+		slog.ErrorContext(ctx, "Error while removing access token from redis", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
@@ -115,23 +115,18 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := "refresh_token:" + refreshStr
-	if _, err := s.Redis.Get(ctx, key).Result(); err == redis.Nil {
+	userIDValue, err := s.Redis.Get(ctx, key).Result()
+	if err == redis.Nil {
 		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
-
-	claimsValue := ctx.Value(UserKey)
-
-	claims, ok := claimsValue.(*Claims)
-
-	if !ok {
-		slog.ErrorContext(ctx, "Error parsing claims", slog.Any("claims", claims))
+	if err != nil {
+		slog.ErrorContext(ctx, "Error while reading refresh token", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-
-	userID := claims.ID
-	if userID == uuid.Nil {
+	userID, err := uuid.Parse(userIDValue)
+	if err != nil || userID == uuid.Nil {
 		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
@@ -142,6 +137,11 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "user with that id not found", slog.Any("id", userID.String()), "error", err.Error())
 		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
+		return
+	}
+	if err := s.Redis.Del(ctx, key).Err(); err != nil {
+		slog.ErrorContext(ctx, "Error while rotating refresh token", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	s.issueTokens(w, r, user)
@@ -217,10 +217,14 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwt := r.Header.Get("Authorization")
-	tokenKey := "access_token:" + jwt
+	accessToken, ok := ctx.Value(tokenKey).(string)
+	if !ok || accessToken == "" {
+		s.JSON(w, r, http.StatusUnauthorized, MsgMissingToken, RespError)
+		return
+	}
+	tokenKey := "access_token:" + accessToken
 	if err := s.Redis.Del(ctx, tokenKey).Err(); err != nil {
-		slog.ErrorContext(ctx, "Error while deleting access token from redis", slog.String("token", jwt))
+		slog.ErrorContext(ctx, "Error while deleting access token from redis", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
@@ -236,7 +240,7 @@ func (s *Server) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	}
 	key := "refresh_token:" + refreshStr
 	if err := s.Redis.Del(ctx, key).Err(); err != nil {
-		slog.ErrorContext(ctx, "Error while deleting refresh token from redis", slog.String("token", refreshStr))
+		slog.ErrorContext(ctx, "Error while deleting refresh token from redis", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
@@ -390,7 +394,7 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, user *model
 		return
 	}
 
-	err = s.Redis.Set(r.Context(), refreshkey, "valid", s.Config.RedisRefreshTokenDur()).Err()
+	err = s.Redis.Set(r.Context(), refreshkey, user.ID.String(), s.Config.RedisRefreshTokenDur()).Err()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "Failed to set refresh token in redis", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)

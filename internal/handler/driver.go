@@ -99,10 +99,25 @@ func (s *Server) CreateDriver(w http.ResponseWriter, r *http.Request) {
 		LicenseExpiry: req.LicenseExpiry.Time,
 		Rating:        0,
 		Slug:          slug.Make(req.FullName + " " + req.LicenseNumber),
+		Status:        "available",
 	}
 
 	if err := storage.Create(ctx, "drivers", driver, tx); err != nil {
 		slog.ErrorContext(ctx, "Unable to create driver", slog.String("error", err.Error()), slog.Any("driver", driver))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	document := models.DriverDocument{
+		ID:         uuid.New(),
+		DriverID:   driver.ID,
+		Type:       "license",
+		Number:     driver.LicenseNumber,
+		ValidUntil: driver.LicenseExpiry,
+		Status:     "valid",
+		CreatedAt:  now,
+	}
+	if err := storage.Create(ctx, "driver_documents", document, tx); err != nil {
+		slog.ErrorContext(ctx, "unable to create driver license document", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}

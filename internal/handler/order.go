@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -36,6 +37,10 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		slog.ErrorContext(ctx, "error while casting claims")
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if claims.Role != "client" && claims.Role != "manager" && claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
 
@@ -92,57 +97,52 @@ func (s *Server) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if err := s.OrderSerice.CancelOrder(ctx, id, claims.ID, claims.Role); err != nil {
-		if errors.Is(err, services.ErrCannotCancel) {
-			slog.ErrorContext(ctx, "Cant cancel order with that id", slog.String("id", id.String()))
-			s.JSON(w, r, http.StatusConflict, "order cant be cancelled in current status", RespError)
-			return
-		}
-		if errors.Is(err, services.ErrForbidden) {
-			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
-			return
-		}
-		slog.ErrorContext(ctx, "error while cancelling order with that id", slog.Any("id", id), slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		return
-	}
-	s.JSON(w, r, http.StatusOK, "Cancelled", RespSuccess)
-}
-
-func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	ctx := r.Context()
-	claims, ok := ctx.Value(UserKey).(*Claims)
-	if !ok {
-		slog.ErrorContext(ctx, "Error while casting claims")
-		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		return
-	}
-
-	var req api.OrderStatusUpdate
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var req api.OrderCancel
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}
-
-	order, err := s.OrderSerice.UpdateOrderStatus(ctx, id, claims.ID, claims.Role, req)
+	order, err := s.OrderSerice.CancelOrder(ctx, id, claims.ID, claims.Role, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrForbidden):
-			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
-		case errors.Is(err, services.ErrCannotCancel):
-			s.JSON(w, r, http.StatusConflict, "cannot cancel order in current status", RespError)
-		default:
-			slog.ErrorContext(ctx, "...", slog.String("error", err.Error()))
-			s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		}
+		s.writeOrderServiceError(w, r, err)
 		return
 	}
+	s.JSON(w, r, http.StatusOK, order, "order")
+}
 
-	if req.Status == api.OrderStatusUpdateStatusInTransit {
-		go s.startRouteTracker(id)
+func (s *Server) UpdateOrderStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	s.JSON(w, r, http.StatusGone, "use explicit /api/v1 order and assignment commands", RespError)
+}
+
+func (s *Server) SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	claims, ok := r.Context().Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
 	}
+	order, err := s.OrderSerice.SubmitOrder(r.Context(), id, claims.ID, claims.Role)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, order, "order")
+}
 
-	s.JSON(w, r, http.StatusOK, order, RespSuccess)
+func (s *Server) writeOrderServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, storage.ErrNotFound) {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+		return
+	}
+	if errors.Is(err, services.ErrForbidden) {
+		s.JSON(w, r, http.StatusForbidden, services.ErrForbidden.Code, RespError)
+		return
+	}
+	if code, ok := services.BusinessErrorCode(err); ok {
+		s.JSON(w, r, http.StatusConflict, code, RespError)
+		return
+	}
+	slog.ErrorContext(r.Context(), "order command failed", slog.String("error", err.Error()))
+	s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 }
 
 func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params api.GetOrdersReportParams) {
