@@ -566,6 +566,15 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 	if role == "driver" && driver.UserID != userID {
 		return nil, ErrForbidden
 	}
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
+	}
 	if assignment.Status != models.AssignmentActive || !models.CanTransitionOrder(order.Status, models.OrderCompleted) {
 		return nil, ErrInvalidOrderTransition
 	}

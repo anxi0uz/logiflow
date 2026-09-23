@@ -52,6 +52,33 @@ func TestManagerCreationRequiresWarehouse(t *testing.T) {
 	}
 }
 
+func TestGlobalFleetMutationsRequireAdmin(t *testing.T) {
+	server := &Server{}
+	tests := []struct {
+		name string
+		call func(http.ResponseWriter, *http.Request)
+	}{
+		{"create vehicle", server.CreateVehicle},
+		{"update vehicle", func(w http.ResponseWriter, r *http.Request) { server.UpdateVehicle(w, r, "truck") }},
+		{"delete vehicle", func(w http.ResponseWriter, r *http.Request) { server.DeleteVehicle(w, r, "truck") }},
+		{"create vehicle document", func(w http.ResponseWriter, r *http.Request) { server.CreateVehicleDocument(w, r, "truck") }},
+		{"update vehicle document", func(w http.ResponseWriter, r *http.Request) { server.UpdateVehicleDocument(w, r, "truck", uuid.New()) }},
+	}
+	for _, role := range []string{"client", "driver", "manager"} {
+		for _, tt := range tests {
+			t.Run(role+"/"+tt.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodPost, "/vehicles", strings.NewReader(`{}`))
+				req = req.WithContext(context.WithValue(req.Context(), UserKey, &Claims{ID: uuid.New(), Role: role}))
+				res := httptest.NewRecorder()
+				tt.call(res, req)
+				if res.Code != http.StatusForbidden {
+					t.Fatalf("got %d, want 403", res.Code)
+				}
+			})
+		}
+	}
+}
+
 type denyingOrderService struct{ services.OrderServicer }
 
 func (denyingOrderService) GetOrder(context.Context, uuid.UUID, uuid.UUID, string) (*models.Order, error) {

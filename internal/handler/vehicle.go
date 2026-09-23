@@ -48,7 +48,7 @@ func (s *Server) CreateVehicleDocument(w http.ResponseWriter, r *http.Request, s
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if claims.Role != "manager" && claims.Role != "admin" {
+	if claims.Role != "admin" {
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
@@ -91,7 +91,7 @@ func (s *Server) UpdateVehicleDocument(w http.ResponseWriter, r *http.Request, s
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if claims.Role != "manager" && claims.Role != "admin" {
+	if claims.Role != "admin" {
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
@@ -149,7 +149,7 @@ func (s *Server) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if claims.Role != "manager" && claims.Role != "admin" {
+	if claims.Role != "admin" {
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
@@ -222,7 +222,7 @@ func (s *Server) UpdateVehicle(w http.ResponseWriter, r *http.Request, slug stri
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if claims.Role != "manager" && claims.Role != "admin" {
+	if claims.Role != "admin" {
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
@@ -286,7 +286,7 @@ func (s *Server) DeleteVehicle(w http.ResponseWriter, r *http.Request, slug stri
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
-	if claims.Role != "manager" && claims.Role != "admin" {
+	if claims.Role != "admin" {
 		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
 		return
 	}
