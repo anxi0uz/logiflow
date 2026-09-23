@@ -289,7 +289,14 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 			return nil, ErrForbidden
 		}
 		if _, err := storage.GetOne[models.Assignment](ctx, s.db, "assignments", func(sb *sqlbuilder.SelectBuilder) {
-			sb.Where(sb.EQ("order_id", id), sb.EQ("driver_id", driver.ID)).Limit(1)
+			sb.Where(
+				sb.EQ("order_id", id),
+				sb.EQ("driver_id", driver.ID),
+				sb.Or(
+					sb.In("status", models.AssignmentAccepted, models.AssignmentActive, models.AssignmentCompleted),
+					sb.And(sb.EQ("status", models.AssignmentPendingAcceptance), sb.GT("offer_expires_at", time.Now())),
+				),
+			).Limit(1)
 		}); err != nil {
 			return nil, ErrForbidden
 		}

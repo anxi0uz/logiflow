@@ -144,11 +144,71 @@ func (s *Server) DeleteManager(w http.ResponseWriter, r *http.Request, slug stri
 		return
 	}
 
-	err := storage.Delete[models.Manager](ctx, "managers", s.DB, func(db *sqlbuilder.DeleteBuilder) {
-		db.Where(db.EQ("slug", slug))
-	})
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		slog.ErrorContext(ctx, "Error while deleting manager with that slug", slog.String("slug", slug), slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	seed, err := storage.GetOne[models.Manager](ctx, tx, "managers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("slug", slug))
+	})
+	if errors.Is(err, storage.ErrNotFound) {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "get manager for deletion", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	// User -> Manager matches account deletion, which cascades to managers.
+	user, err := storage.GetOne[models.User](ctx, tx, "users", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", seed.UserID)).ForUpdate()
+	})
+	if errors.Is(err, storage.ErrNotFound) {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "get manager account for deletion", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	manager, err := storage.GetOne[models.Manager](ctx, tx, "managers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", seed.ID)).ForUpdate()
+	})
+	if errors.Is(err, storage.ErrNotFound) {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+		return
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "lock manager profile for deletion", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if manager.UserID != user.ID || manager.Slug != slug {
+		s.JSON(w, r, http.StatusConflict, "MANAGER_STALE", RespError)
+		return
+	}
+	if user.Role != "manager" {
+		s.JSON(w, r, http.StatusConflict, "MANAGER_ROLE_MISMATCH", RespError)
+		return
+	}
+	user.Role = roleDisabled
+	user.UpdatedAt = time.Now()
+	if err := storage.Update(ctx, "users", *user, tx, func(ub *sqlbuilder.UpdateBuilder) { ub.Where(ub.EQ("id", user.ID)) }); err != nil {
+		slog.ErrorContext(ctx, "disable manager account", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if err := storage.Delete[models.Manager](ctx, "managers", tx, func(db *sqlbuilder.DeleteBuilder) { db.Where(db.EQ("id", manager.ID)) }); err != nil {
+		slog.ErrorContext(ctx, "delete manager profile", slog.String("error", err.Error()))
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	if err := tx.Commit(ctx); err != nil {
+		slog.ErrorContext(ctx, "commit manager deletion", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}

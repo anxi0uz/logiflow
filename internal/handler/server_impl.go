@@ -12,11 +12,14 @@ import (
 
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
+	"github.com/anxi0uz/logiflow/internal/models"
 	"github.com/anxi0uz/logiflow/internal/services"
+	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -263,6 +266,15 @@ func (s *Server) validateAccessToken(ctx context.Context, tokenStr string) (*Cla
 
 	if claims.ID == uuid.Nil {
 		return nil, errors.New("missing user id in claims")
+	}
+	user, err := storage.GetOne[models.User](ctx, s.DB, "users", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", claims.ID))
+	})
+	if err != nil {
+		return nil, fmt.Errorf("access token user lookup: %w", err)
+	}
+	if user.Role == roleDisabled || user.Role != claims.Role {
+		return nil, errors.New("access token role is no longer valid")
 	}
 
 	return claims, nil

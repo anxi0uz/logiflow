@@ -84,6 +84,13 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err := storage.Create(ctx, "warehouses", otherWarehouse, pool); err != nil {
 		t.Fatalf("create other warehouse: %v", err)
 	}
+	otherManagerID := uuid.New()
+	if err := storage.Create(ctx, "users", models.User{ID: otherManagerID, Email: "other-manager-smoke@example.com", Slug: "other-manager-smoke", PasswordHash: "test", FullName: "Other Manager", Role: "manager", CreatedAt: time.Now()}, pool); err != nil {
+		t.Fatalf("create other manager account: %v", err)
+	}
+	if err := storage.Create(ctx, "managers", models.Manager{ID: uuid.New(), UserID: otherManagerID, WarehouseID: &otherWarehouse.ID, Slug: "other-manager-smoke"}, pool); err != nil {
+		t.Fatalf("create other manager profile: %v", err)
+	}
 	otherDraft := createDraftOrder(t, ctx, pool, clientID, otherWarehouse.ID, plannedFrom, plannedTo)
 	newWeight := float32(200)
 	addressOnly := createDraftOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom, plannedTo)
@@ -167,6 +174,12 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err := storage.Create(ctx, "assignments", otherAssignment, pool); err != nil {
 		t.Fatalf("create other warehouse assignment: %v", err)
 	}
+	if _, err := service.GetOrder(ctx, otherDraft.ID, driverUserID, "driver"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("rejected driver can read order: %v", err)
+	}
+	if _, err := service.GetOrder(ctx, order.ID, driverUserID, "driver"); err != nil {
+		t.Fatalf("driver cannot read current offer: %v", err)
+	}
 	managerAssignments, err := service.ListAssignments(ctx, managerID, "manager", api.ListAssignmentsParams{})
 	if err != nil || len(managerAssignments) != 1 || managerAssignments[0].ID != assignment.ID {
 		t.Fatalf("manager assignment scope: %+v err=%v", managerAssignments, err)
@@ -208,6 +221,13 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if _, err := service.ArriveAssignment(ctx, assignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("arrive assignment: %v", err)
 	}
+	if _, err := service.CompleteAssignment(ctx, assignment.ID, otherManagerID, "manager", api.DeliveryComplete{}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("other warehouse manager completed delivery: %v", err)
+	}
+	stillArrived, err := storage.GetOne[models.Order](ctx, pool, "orders", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", order.ID)) })
+	if err != nil || stillArrived.Status != models.OrderArrived {
+		t.Fatalf("forbidden completion changed order: %+v err=%v", stillArrived, err)
+	}
 	recipient := "Smoke Recipient"
 	comment := "received intact"
 	if _, err := service.CompleteAssignment(ctx, assignment.ID, driverUserID, "driver", api.DeliveryComplete{RecipientName: &recipient, Comment: &comment}); err != nil {
@@ -224,6 +244,9 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	completedOrder, err := storage.GetOne[models.Order](ctx, pool, "orders", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", order.ID)) })
 	if err != nil || completedOrder.Status != models.OrderCompleted {
 		t.Fatalf("completed order: status=%v err=%v", completedOrder, err)
+	}
+	if _, err := service.GetOrder(ctx, order.ID, driverUserID, "driver"); err != nil {
+		t.Fatalf("driver cannot read completed trip: %v", err)
 	}
 	completedAssignment, err := storage.GetOne[models.Assignment](ctx, pool, "assignments", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", assignment.ID)) })
 	if err != nil || completedAssignment.Status != models.AssignmentCompleted || completedAssignment.RecipientName == nil || *completedAssignment.RecipientName != recipient {
@@ -312,9 +335,51 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err != nil || released.Status != models.AssignmentReleased {
 		t.Fatalf("cancel did not release reservation: %+v err=%v", released, err)
 	}
+	if _, err := service.GetOrder(ctx, docOrder.ID, driverUserID, "driver"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("released driver can read order: %v", err)
+	}
+	expiredFrom, expiredTo := plannedFrom.Add(96*time.Hour), plannedTo.Add(96*time.Hour)
+	expiredOrder := createReadyOrder(t, ctx, pool, clientID, warehouse.ID, expiredFrom, expiredTo)
+	expiredOffer := models.Assignment{
+		ID:              uuid.New(),
+		OrderID:         expiredOrder.ID,
+		DriverID:        driver.ID,
+		VehicleID:       vehicle.ID,
+		Status:          models.AssignmentPendingAcceptance,
+		PlannedFrom:     expiredFrom,
+		PlannedTo:       expiredTo,
+		CreatedByUserID: managerID,
+		Source:          "manual",
+		AssignedAt:      time.Now().Add(-16 * time.Minute),
+		OfferExpiresAt:  time.Now().Add(-time.Minute),
+	}
+	if err := storage.Create(ctx, "assignments", expiredOffer, pool); err != nil {
+		t.Fatalf("create expired offer: %v", err)
+	}
+	if _, err := service.GetOrder(ctx, expiredOrder.ID, driverUserID, "driver"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("driver can read order through expired offer: %v", err)
+	}
 	history, err = service.ListOrderAssignments(ctx, docOrder.ID, managerID, "manager")
 	if err != nil || len(history) != 3 {
 		t.Fatalf("rejection history lost: %+v err=%v", history, err)
+	}
+	managerFrom, managerTo := plannedFrom.Add(72*time.Hour), plannedTo.Add(72*time.Hour)
+	managerOrder := createReadyOrder(t, ctx, pool, clientID, warehouse.ID, managerFrom, managerTo)
+	managerAssignment, err := service.CreateAssignment(ctx, managerOrder.ID, managerID, "manager", api.AssignmentCreate{DriverId: driver.ID, VehicleId: vehicle.ID, PlannedFrom: managerFrom, PlannedTo: managerTo})
+	if err != nil {
+		t.Fatalf("create manager completion assignment: %v", err)
+	}
+	if _, err := service.AcceptAssignment(ctx, managerAssignment.ID, driverUserID, "driver"); err != nil {
+		t.Fatalf("accept manager completion assignment: %v", err)
+	}
+	if _, err := service.StartAssignment(ctx, managerAssignment.ID, driverUserID, "driver"); err != nil {
+		t.Fatalf("start manager completion assignment: %v", err)
+	}
+	if _, err := service.ArriveAssignment(ctx, managerAssignment.ID, driverUserID, "driver"); err != nil {
+		t.Fatalf("arrive manager completion assignment: %v", err)
+	}
+	if _, err := service.CompleteAssignment(ctx, managerAssignment.ID, managerID, "manager", api.DeliveryComplete{RecipientName: &recipient}); err != nil {
+		t.Fatalf("own warehouse manager could not complete delivery: %v", err)
 	}
 }
 

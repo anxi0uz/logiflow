@@ -29,6 +29,8 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+const roleDisabled = "disabled"
+
 func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -44,6 +46,10 @@ func (s *Server) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.WarnContext(ctx, "user with that email not found in db", slog.String("Email", string(req.Email)), slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusBadRequest, "Пользователь с таким Email не найден", "error")
+		return
+	}
+	if user.Role == roleDisabled {
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}
 
@@ -136,6 +142,10 @@ func (s *Server) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "user with that id not found", slog.Any("id", userID.String()), "error", err.Error())
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
+		return
+	}
+	if user.Role == roleDisabled {
 		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
 		return
 	}

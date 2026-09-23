@@ -913,6 +913,7 @@ paths:
     post:
       operationId: createVehicle
       summary: Добавить ТС
+      description: Только для роли admin; менеджер может просматривать общий автопарк, но не менять его.
       tags: [Vehicles]
       requestBody:
         required: true
@@ -959,6 +960,7 @@ paths:
     put:
       operationId: updateVehicle
       summary: Обновить ТС
+      description: Только для роли admin.
       tags: [Vehicles]
       requestBody:
         required: true
@@ -979,6 +981,7 @@ paths:
     delete:
       operationId: deleteVehicle
       summary: Удалить ТС
+      description: Только для роли admin.
       tags: [Vehicles]
       responses:
         "200":
@@ -999,6 +1002,7 @@ paths:
         "200": { description: Документы ТС }
     post:
       operationId: createVehicleDocument
+      description: Только для роли admin.
       tags: [Vehicles]
       requestBody:
         required: true
@@ -1020,6 +1024,7 @@ paths:
         schema: { type: string, format: uuid }
     patch:
       operationId: updateVehicleDocument
+      description: Только для роли admin.
       tags: [Vehicles]
       requestBody:
         required: true
@@ -1176,7 +1181,7 @@ paths:
     delete:
       operationId: deleteManager
       summary: Удалить менеджера
-      description: Только для роли admin.
+      description: Только для роли admin. Удаляет профиль и отключает учётную запись, сохраняя историю заказов и назначений.
       tags: [Managers]
       responses:
         "200":
