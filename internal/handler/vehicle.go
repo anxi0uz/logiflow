@@ -53,7 +53,7 @@ func (s *Server) CreateVehicleDocument(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	var req api.VehicleDocumentCreate
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Type != "registration" || req.Number == "" || req.ValidUntil.Time.Before(time.Now().Truncate(24*time.Hour)) {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Type != "registration" || req.Number == "" || req.ValidUntil.Before(time.Now().Truncate(24*time.Hour)) {
 		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}

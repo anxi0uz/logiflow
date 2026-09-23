@@ -456,17 +456,3 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
 	}
 	return &report, nil
 }
-
-func (s *OrderService) createNotification(ctx context.Context, userID uuid.UUID, title, body string) {
-	n := models.Notification{
-		ID:        uuid.New(),
-		UserID:    userID,
-		Title:     title,
-		Body:      &body,
-		IsRead:    false,
-		CreatedAt: time.Now(),
-	}
-	if err := storage.Create(ctx, "notifications", n, s.db); err != nil {
-		slog.ErrorContext(ctx, "failed to create notification", slog.String("error", err.Error()))
-	}
-}
