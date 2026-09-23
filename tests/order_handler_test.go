@@ -19,19 +19,32 @@ import (
 // --- Mock ---
 
 type mockOrderService struct {
-	createOrder        func(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error)
-	listOrders         func(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
-	getOrder           func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
-	submitOrder        func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
-	cancelOrder        func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderCancel) (*models.Order, error)
-	createAssignment   func(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string, req api.AssignmentCreate) (*models.Assignment, error)
-	acceptAssignment   func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
-	rejectAssignment   func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.AssignmentReject) (*models.Assignment, error)
-	startAssignment    func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
-	arriveAssignment   func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
-	completeAssignment func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
-	getOrdersReport    func(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
-	getDashboard       func(ctx context.Context, role string) (*models.DashboardReport, error)
+	updateDraftOrder     func(context.Context, uuid.UUID, uuid.UUID, string, api.OrderDraftUpdate) (*models.Order, error)
+	listAssignments      func(context.Context, uuid.UUID, string, api.ListAssignmentsParams) ([]models.Assignment, error)
+	listOrderAssignments func(context.Context, uuid.UUID, uuid.UUID, string) ([]models.Assignment, error)
+	createOrder          func(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error)
+	listOrders           func(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
+	getOrder             func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
+	submitOrder          func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
+	cancelOrder          func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderCancel) (*models.Order, error)
+	createAssignment     func(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string, req api.AssignmentCreate) (*models.Assignment, error)
+	acceptAssignment     func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	rejectAssignment     func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.AssignmentReject) (*models.Assignment, error)
+	startAssignment      func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	arriveAssignment     func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
+	completeAssignment   func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
+	getOrdersReport      func(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
+	getDashboard         func(ctx context.Context, role string) (*models.DashboardReport, error)
+}
+
+func (m *mockOrderService) UpdateDraftOrder(ctx context.Context, id, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error) {
+	return m.updateDraftOrder(ctx, id, userID, role, req)
+}
+func (m *mockOrderService) ListAssignments(ctx context.Context, userID uuid.UUID, role string, params api.ListAssignmentsParams) ([]models.Assignment, error) {
+	return m.listAssignments(ctx, userID, role, params)
+}
+func (m *mockOrderService) ListOrderAssignments(ctx context.Context, orderID, userID uuid.UUID, role string) ([]models.Assignment, error) {
+	return m.listOrderAssignments(ctx, orderID, userID, role)
 }
 
 func (m *mockOrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error) {
@@ -131,6 +144,17 @@ func TestCreateOrder_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestUpdateDraftOrderRejectsUnsupportedAddressEdit(t *testing.T) {
+	s := newTestServer(&mockOrderService{})
+	r := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/"+uuid.NewString(), bytes.NewBufferString(`{"destinationAddress":"Changed"}`))
+	r = withClaims(r, uuid.New(), "client")
+	w := httptest.NewRecorder()
+	s.UpdateDraftOrder(w, r, uuid.New())
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unsupported address edit returned %d", w.Code)
 	}
 }
 

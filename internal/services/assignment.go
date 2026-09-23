@@ -56,6 +56,11 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 	if err := s.recordOrderStatus(ctx, tx, order.ID, from, order.Status, userID, nil); err != nil {
 		return nil, err
 	}
+	if order.CreatedByID != nil && *order.CreatedByID != userID {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Заказ отправлен", fmt.Sprintf("Заказ %s готов к назначению водителя", id)); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit submit order: %w", err)
 	}
@@ -121,6 +126,13 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 		}); err != nil {
 			return nil, err
 		}
+		driver, err := storage.GetOne[models.Driver](ctx, tx, "drivers", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", assignment.DriverID)) })
+		if err != nil {
+			return nil, err
+		}
+		if err := s.notify(ctx, tx, driver.UserID, "Назначение отменено", fmt.Sprintf("Заказ %s отменён, назначение %s снято", id, assignment.ID)); err != nil {
+			return nil, err
+		}
 	}
 	from := order.Status
 	order.Status = models.OrderCancelled
@@ -132,6 +144,11 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 	}
 	if err := s.recordOrderStatus(ctx, tx, id, from, order.Status, userID, req.ReasonCode); err != nil {
 		return nil, err
+	}
+	if order.CreatedByID != nil && *order.CreatedByID != userID {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Заказ отменён", fmt.Sprintf("Заказ %s отменён менеджером", id)); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit cancel order: %w", err)
@@ -192,7 +209,7 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 	}
 	sort.Slice(driverIDs, func(i, j int) bool { return driverIDs[i].String() < driverIDs[j].String() })
 	sort.Slice(vehicleIDs, func(i, j int) bool { return vehicleIDs[i].String() < vehicleIDs[j].String() })
-	var driver *models.Driver
+	var driver, previousDriver *models.Driver
 	for _, driverID := range driverIDs {
 		locked, err := storage.GetOne[models.Driver](ctx, tx, "drivers", func(sb *sqlbuilder.SelectBuilder) {
 			sb.Where(sb.EQ("id", driverID)).ForUpdate()
@@ -202,6 +219,9 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 		}
 		if driverID == req.DriverId {
 			driver = locked
+		}
+		if previous != nil && driverID == previous.DriverID {
+			previousDriver = locked
 		}
 	}
 	var vehicle *models.Vehicle
@@ -250,6 +270,9 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 		}); err != nil {
 			return nil, err
 		}
+		if err := s.notify(ctx, tx, previousDriver.UserID, "Назначение заменено", fmt.Sprintf("Предложение %s по заказу %s отозвано", previous.ID, orderID)); err != nil {
+			return nil, err
+		}
 		if order.Status == models.OrderAssigned {
 			from := order.Status
 			order.Status = models.OrderReadyForDispatch
@@ -288,6 +311,9 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 		}
 		return nil, fmt.Errorf("create assignment: %w", err)
 	}
+	if err := s.notify(ctx, tx, driver.UserID, "Новое назначение", fmt.Sprintf("Предложение %s по заказу %s: примите или отклоните до истечения срока", assignment.ID, orderID)); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit assignment: %w", err)
 	}
@@ -322,6 +348,9 @@ func (s *OrderService) AcceptAssignment(ctx context.Context, id uuid.UUID, userI
 		}); err != nil {
 			return nil, err
 		}
+		if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Предложение истекло", fmt.Sprintf("Назначение %s по заказу %s не принято вовремя", id, order.ID)); err != nil {
+			return nil, err
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
@@ -351,6 +380,14 @@ func (s *OrderService) AcceptAssignment(ctx context.Context, id uuid.UUID, userI
 	}
 	if err := s.recordOrderStatus(ctx, tx, order.ID, from, order.Status, userID, nil); err != nil {
 		return nil, err
+	}
+	if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Назначение принято", fmt.Sprintf("Водитель принял назначение %s по заказу %s", id, order.ID)); err != nil {
+		return nil, err
+	}
+	if order.CreatedByID != nil {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Водитель назначен", fmt.Sprintf("Заказ %s принят водителем", order.ID)); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -385,6 +422,9 @@ func (s *OrderService) RejectAssignment(ctx context.Context, id uuid.UUID, userI
 	if err := storage.Update(ctx, "assignments", *assignment, tx, func(ub *sqlbuilder.UpdateBuilder) {
 		ub.Where(ub.EQ("id", id))
 	}); err != nil {
+		return nil, err
+	}
+	if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Назначение отклонено", fmt.Sprintf("Водитель отклонил назначение %s по заказу %s", id, assignment.OrderID)); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -427,6 +467,11 @@ func (s *OrderService) StartAssignment(ctx context.Context, id uuid.UUID, userID
 	if err := s.recordOrderStatus(ctx, tx, order.ID, from, order.Status, userID, nil); err != nil {
 		return nil, err
 	}
+	if order.CreatedByID != nil {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Доставка началась", fmt.Sprintf("Водитель начал перевозку заказа %s", order.ID)); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -461,6 +506,11 @@ func (s *OrderService) ArriveAssignment(ctx context.Context, id uuid.UUID, userI
 	}
 	if err := s.recordOrderStatus(ctx, tx, order.ID, from, order.Status, userID, nil); err != nil {
 		return nil, err
+	}
+	if order.CreatedByID != nil {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Водитель прибыл", fmt.Sprintf("Водитель прибыл с заказом %s", order.ID)); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -503,6 +553,11 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 	}
 	if err := s.recordOrderStatus(ctx, tx, order.ID, from, order.Status, userID, nil); err != nil {
 		return nil, err
+	}
+	if order.CreatedByID != nil {
+		if err := s.notify(ctx, tx, *order.CreatedByID, "Доставка завершена", fmt.Sprintf("Доставка заказа %s подтверждена", order.ID)); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -580,6 +635,10 @@ func (s *OrderService) expireStaleAssignments(ctx context.Context, orderID, driv
 				tx.Rollback(ctx) //nolint:errcheck
 				return err
 			}
+			if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Предложение истекло", fmt.Sprintf("Назначение %s по заказу %s не принято вовремя", assignment.ID, assignment.OrderID)); err != nil {
+				tx.Rollback(ctx)
+				return err
+			}
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return err
@@ -617,6 +676,22 @@ func (s *OrderService) validateAssignmentResources(ctx context.Context, tx pgx.T
 	if vehicle.Status != "available" {
 		return ErrVehicleNotOperational
 	}
+	vehicleDocuments, err := storage.GetAll[models.VehicleDocument](ctx, "vehicle_documents", tx, func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("vehicle_id", vehicle.ID), sb.EQ("type", "registration"))
+	})
+	if err != nil {
+		return err
+	}
+	validRegistration := false
+	for _, document := range vehicleDocuments {
+		if document.Status == "valid" && !to.After(document.ValidUntil.Add(24*time.Hour)) {
+			validRegistration = true
+			break
+		}
+	}
+	if !validRegistration {
+		return ErrVehicleDocumentInvalid
+	}
 	if order.WeightKg > vehicle.CapacityKg || order.VolumeM3 > vehicle.CapacityM3 {
 		return ErrVehicleCapacityExceeded
 	}
@@ -652,4 +727,10 @@ func (s *OrderService) recordOrderStatus(ctx context.Context, tx pgx.Tx, orderID
 		CreatedAt:   time.Now(),
 	}
 	return storage.Create(ctx, "order_status_history", history, tx)
+}
+
+func (s *OrderService) notify(ctx context.Context, tx pgx.Tx, userID uuid.UUID, title, body string) error {
+	return storage.Create(ctx, "notifications", models.Notification{
+		ID: uuid.New(), UserID: userID, Title: title, Body: &body, CreatedAt: time.Now(),
+	}, tx)
 }

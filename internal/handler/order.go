@@ -52,6 +52,10 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.OrderSerice.CreateOrder(ctx, req, claims.ID)
 	if err != nil {
+		if _, ok := services.BusinessErrorCode(err); ok {
+			s.writeOrderServiceError(w, r, err)
+			return
+		}
 		slog.ErrorContext(ctx, "create order failed", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
@@ -87,6 +91,27 @@ func (s *Server) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_typ
 		return
 	}
 	s.JSON(w, r, http.StatusOK, order, RespSuccess)
+}
+
+func (s *Server) UpdateDraftOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	claims, ok := r.Context().Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	var req api.OrderDraftUpdate
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
+		return
+	}
+	order, err := s.OrderSerice.UpdateDraftOrder(r.Context(), id, claims.ID, claims.Role, req)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, order, "order")
 }
 
 func (s *Server) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
@@ -138,7 +163,11 @@ func (s *Server) writeOrderServiceError(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if code, ok := services.BusinessErrorCode(err); ok {
-		s.JSON(w, r, http.StatusConflict, code, RespError)
+		status := http.StatusConflict
+		if errors.Is(err, services.ErrInvalidOrderInput) || errors.Is(err, services.ErrInvalidTimeWindow) || errors.Is(err, services.ErrVehicleDocumentInvalid) || errors.Is(err, services.ErrVehicleCapacityExceeded) || errors.Is(err, services.ErrDriverLicenseExpired) {
+			status = http.StatusUnprocessableEntity
+		}
+		s.JSON(w, r, status, code, RespError)
 		return
 	}
 	slog.ErrorContext(r.Context(), "order command failed", slog.String("error", err.Error()))

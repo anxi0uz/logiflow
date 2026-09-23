@@ -29,6 +29,9 @@ type OrderServicer interface {
 	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*CreateOrderResult, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
 	GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
+	UpdateDraftOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error)
+	ListAssignments(ctx context.Context, userID uuid.UUID, role string, params api.ListAssignmentsParams) ([]models.Assignment, error)
+	ListOrderAssignments(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string) ([]models.Assignment, error)
 	SubmitOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
 	CancelOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderCancel) (*models.Order, error)
 	CreateAssignment(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string, req api.AssignmentCreate) (*models.Assignment, error)
@@ -53,6 +56,11 @@ func NewOrderService(db *pgxpool.Pool, cfg config.Config) *OrderService {
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*CreateOrderResult, error) {
+	if (req.OriginWarehouseId == nil && (req.OriginAddress == nil || *req.OriginAddress == "")) || req.DestinationAddress == "" ||
+		(req.WeightKg != nil && *req.WeightKg < 0) || (req.VolumeM3 != nil && *req.VolumeM3 < 0) ||
+		(req.PickupFrom != nil && req.PickupTo != nil && !req.PickupFrom.Before(*req.PickupTo)) {
+		return nil, ErrInvalidOrderInput
+	}
 	var (
 		originLat, originLon float64
 		destLat, destLon     float64
@@ -89,7 +97,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 			return nil
 		}
 		var err error
-		destLat, destLon, err = geocode.Geocode(ctx, req.DestinationAddress)
+		destLat, destLon, err = geocode.Geocode(gctx, req.DestinationAddress)
 		return err
 	})
 
@@ -137,6 +145,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 	order := models.Order{
 		ID:                 orderID,
 		CreatedByID:        &userID,
+		OriginWarehouseID:  req.OriginWarehouseId,
 		DestinationAddress: req.DestinationAddress,
 		Status:             models.OrderDraft,
 		TotalPrice:         price,
@@ -238,8 +247,116 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
 		return nil, ErrForbidden
 	}
+	if role == "driver" {
+		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", userID)) })
+		if err != nil {
+			return nil, ErrForbidden
+		}
+		if _, err := storage.GetOne[models.Assignment](ctx, s.db, "assignments", func(sb *sqlbuilder.SelectBuilder) {
+			sb.Where(sb.EQ("order_id", id), sb.EQ("driver_id", driver.ID)).Limit(1)
+		}); err != nil {
+			return nil, ErrForbidden
+		}
+	}
+	if role != "client" && role != "driver" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
 
 	return order, nil
+}
+
+func (s *OrderService) UpdateDraftOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error) {
+	if role != "client" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
+	if req.CargoDescription == nil && req.WeightKg == nil && req.VolumeM3 == nil && req.PickupFrom == nil && req.PickupTo == nil {
+		return nil, ErrInvalidOrderInput
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	order, err := storage.GetOne[models.Order](ctx, tx, "orders", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("id", id)).ForUpdate()
+	})
+	if err != nil {
+		return nil, err
+	}
+	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
+		return nil, ErrForbidden
+	}
+	if order.Status != models.OrderDraft {
+		return nil, ErrInvalidOrderTransition
+	}
+	if req.CargoDescription != nil {
+		order.CargoDescription = *req.CargoDescription
+	}
+	if req.WeightKg != nil {
+		order.WeightKg = float64(*req.WeightKg)
+	}
+	if req.VolumeM3 != nil {
+		order.VolumeM3 = float64(*req.VolumeM3)
+	}
+	if req.PickupFrom != nil {
+		order.PickupFrom = req.PickupFrom
+	}
+	if req.PickupTo != nil {
+		order.PickupTo = req.PickupTo
+	}
+	if order.WeightKg < 0 || order.VolumeM3 < 0 || (order.PickupFrom != nil && order.PickupTo != nil && !order.PickupFrom.Before(*order.PickupTo)) {
+		return nil, ErrInvalidOrderInput
+	}
+	route, err := storage.GetOne[models.Route](ctx, tx, "routes", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("order_id", id)) })
+	if err != nil {
+		return nil, err
+	}
+	order.TotalPrice = s.config.Pricing.BaseFee + route.DistanceKm*s.config.Pricing.PerKm + order.WeightKg*s.config.Pricing.PerKg + order.VolumeM3*s.config.Pricing.PerM3
+	if err := storage.Update(ctx, "orders", *order, tx, func(ub *sqlbuilder.UpdateBuilder) { ub.Where(ub.EQ("id", id)) }); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+func (s *OrderService) ListAssignments(ctx context.Context, userID uuid.UUID, role string, params api.ListAssignmentsParams) ([]models.Assignment, error) {
+	if role != "driver" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
+	var driverID uuid.UUID
+	if role == "driver" {
+		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", userID)) })
+		if err != nil {
+			return nil, err
+		}
+		driverID = driver.ID
+	}
+	return storage.GetAll[models.Assignment](ctx, "assignments", s.db, func(sb *sqlbuilder.SelectBuilder) {
+		if role == "driver" {
+			sb.Where(sb.EQ("driver_id", driverID))
+		}
+		if params.Status != nil {
+			sb.Where(sb.EQ("status", *params.Status))
+		}
+		if params.OrderId != nil {
+			sb.Where(sb.EQ("order_id", *params.OrderId))
+		}
+		sb.OrderBy("assigned_at DESC", "id DESC")
+	})
+}
+
+func (s *OrderService) ListOrderAssignments(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string) ([]models.Assignment, error) {
+	if role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
+	if _, err := s.GetOrder(ctx, orderID, userID, role); err != nil {
+		return nil, err
+	}
+	return storage.GetAll[models.Assignment](ctx, "assignments", s.db, func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("order_id", orderID)).OrderBy("assigned_at DESC", "id DESC")
+	})
 }
 func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
 	if role != "manager" {
@@ -338,18 +455,4 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
 		report.Drivers = []models.DashboardDriverStat{}
 	}
 	return &report, nil
-}
-
-func (s *OrderService) createNotification(ctx context.Context, userID uuid.UUID, title, body string) {
-	n := models.Notification{
-		ID:        uuid.New(),
-		UserID:    userID,
-		Title:     title,
-		Body:      &body,
-		IsRead:    false,
-		CreatedAt: time.Now(),
-	}
-	if err := storage.Create(ctx, "notifications", n, s.db); err != nil {
-		slog.ErrorContext(ctx, "failed to create notification", slog.String("error", err.Error()))
-	}
 }

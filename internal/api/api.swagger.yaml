@@ -495,6 +495,30 @@ components:
           format: date-time
           nullable: true
 
+    OrderDraftUpdate:
+      type: object
+      description: Изменяются только груз и окно забора; адреса и маршрут сохраняются.
+      properties:
+        cargoDescription: { type: string }
+        weightKg: { type: number, minimum: 0 }
+        volumeM3: { type: number, minimum: 0 }
+        pickupFrom: { type: string, format: date-time }
+        pickupTo: { type: string, format: date-time }
+
+    VehicleDocumentCreate:
+      type: object
+      required: [type, number, validUntil]
+      properties:
+        type: { type: string, enum: [registration] }
+        number: { type: string }
+        validUntil: { type: string, format: date }
+
+    VehicleDocumentUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [valid, suspended, expired] }
+
     AssignmentCreate:
       type: object
       required: [driverId, vehicleId, plannedFrom, plannedTo]
@@ -963,6 +987,49 @@ paths:
         "404":
           description: Не найдено
 
+  /vehicles/{slug}/documents:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listVehicleDocuments
+      tags: [Vehicles]
+      responses:
+        "200": { description: Документы ТС }
+    post:
+      operationId: createVehicleDocument
+      tags: [Vehicles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleDocumentCreate" }
+      responses:
+        "201": { description: Документ добавлен }
+
+  /vehicles/{slug}/documents/{id}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      operationId: updateVehicleDocument
+      tags: [Vehicles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleDocumentUpdate" }
+      responses:
+        "200": { description: Статус документа обновлён }
+
   # ─── Warehouses ─────────────────────────────────────────────────────────────
 
   /warehouses:
@@ -1305,6 +1372,19 @@ paths:
         "404":
           description: Не найдено
 
+    patch:
+      operationId: updateDraftOrder
+      summary: Изменить груз и окно забора черновика
+      tags: [Orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderDraftUpdate" }
+      responses:
+        "200": { description: Черновик обновлён }
+        "409": { description: Заказ уже отправлен }
+
   /api/v1/orders/{id}/submit:
     post:
       operationId: submitOrder
@@ -1339,6 +1419,17 @@ paths:
         "409": { description: Заказ нельзя отменить }
 
   /api/v1/orders/{id}/assignments:
+    get:
+      operationId: listOrderAssignments
+      summary: История назначений заказа
+      tags: [Assignments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Назначения заказа }
     post:
       operationId: createAssignment
       summary: Предложить или заменить назначение
@@ -1356,6 +1447,21 @@ paths:
       responses:
         "201": { description: Назначение создано }
         "409": { description: Ресурс занят или состояние изменилось }
+
+  /api/v1/assignments:
+    get:
+      operationId: listAssignments
+      summary: Предложения водителя или назначения менеджера
+      tags: [Assignments]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending_acceptance, accepted, active, rejected, released, expired, completed] }
+        - name: orderId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Список назначений }
 
   /api/v1/assignments/{id}/accept:
     post:

@@ -73,6 +73,42 @@ func (e DriverUpdateStatus) Valid() bool {
 	}
 }
 
+// Defines values for VehicleDocumentCreateType.
+const (
+	Registration VehicleDocumentCreateType = "registration"
+)
+
+// Valid indicates whether the value is a known member of the VehicleDocumentCreateType enum.
+func (e VehicleDocumentCreateType) Valid() bool {
+	switch e {
+	case Registration:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VehicleDocumentUpdateStatus.
+const (
+	VehicleDocumentUpdateStatusExpired   VehicleDocumentUpdateStatus = "expired"
+	VehicleDocumentUpdateStatusSuspended VehicleDocumentUpdateStatus = "suspended"
+	VehicleDocumentUpdateStatusValid     VehicleDocumentUpdateStatus = "valid"
+)
+
+// Valid indicates whether the value is a known member of the VehicleDocumentUpdateStatus enum.
+func (e VehicleDocumentUpdateStatus) Valid() bool {
+	switch e {
+	case VehicleDocumentUpdateStatusExpired:
+		return true
+	case VehicleDocumentUpdateStatusSuspended:
+		return true
+	case VehicleDocumentUpdateStatusValid:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VehicleUpdateStatus.
 const (
 	VehicleUpdateStatusAvailable   VehicleUpdateStatus = "available"
@@ -106,6 +142,39 @@ func (e WarehouseUpdateStatus) Valid() bool {
 	case Active:
 		return true
 	case Inactive:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAssignmentsParamsStatus.
+const (
+	ListAssignmentsParamsStatusAccepted          ListAssignmentsParamsStatus = "accepted"
+	ListAssignmentsParamsStatusActive            ListAssignmentsParamsStatus = "active"
+	ListAssignmentsParamsStatusCompleted         ListAssignmentsParamsStatus = "completed"
+	ListAssignmentsParamsStatusExpired           ListAssignmentsParamsStatus = "expired"
+	ListAssignmentsParamsStatusPendingAcceptance ListAssignmentsParamsStatus = "pending_acceptance"
+	ListAssignmentsParamsStatusRejected          ListAssignmentsParamsStatus = "rejected"
+	ListAssignmentsParamsStatusReleased          ListAssignmentsParamsStatus = "released"
+)
+
+// Valid indicates whether the value is a known member of the ListAssignmentsParamsStatus enum.
+func (e ListAssignmentsParamsStatus) Valid() bool {
+	switch e {
+	case ListAssignmentsParamsStatusAccepted:
+		return true
+	case ListAssignmentsParamsStatusActive:
+		return true
+	case ListAssignmentsParamsStatusCompleted:
+		return true
+	case ListAssignmentsParamsStatusExpired:
+		return true
+	case ListAssignmentsParamsStatusPendingAcceptance:
+		return true
+	case ListAssignmentsParamsStatusRejected:
+		return true
+	case ListAssignmentsParamsStatusReleased:
 		return true
 	default:
 		return false
@@ -303,6 +372,15 @@ type OrderCreate struct {
 	WeightKg               *float32            `json:"weightKg,omitempty"`
 }
 
+// OrderDraftUpdate Изменяются только груз и окно забора; адреса и маршрут сохраняются.
+type OrderDraftUpdate struct {
+	CargoDescription *string    `json:"cargoDescription,omitempty"`
+	PickupFrom       *time.Time `json:"pickupFrom,omitempty"`
+	PickupTo         *time.Time `json:"pickupTo,omitempty"`
+	VolumeM3         *float32   `json:"volumeM3,omitempty"`
+	WeightKg         *float32   `json:"weightKg,omitempty"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -332,6 +410,24 @@ type VehicleCreate struct {
 	PlateNumber string   `json:"plateNumber"`
 	Year        *int     `json:"year,omitempty"`
 }
+
+// VehicleDocumentCreate defines model for VehicleDocumentCreate.
+type VehicleDocumentCreate struct {
+	Number     string                    `json:"number"`
+	Type       VehicleDocumentCreateType `json:"type"`
+	ValidUntil openapi_types.Date        `json:"validUntil"`
+}
+
+// VehicleDocumentCreateType defines model for VehicleDocumentCreate.Type.
+type VehicleDocumentCreateType string
+
+// VehicleDocumentUpdate defines model for VehicleDocumentUpdate.
+type VehicleDocumentUpdate struct {
+	Status VehicleDocumentUpdateStatus `json:"status"`
+}
+
+// VehicleDocumentUpdateStatus defines model for VehicleDocumentUpdate.Status.
+type VehicleDocumentUpdateStatus string
 
 // VehicleUpdate defines model for VehicleUpdate.
 type VehicleUpdate struct {
@@ -368,6 +464,15 @@ type WarehouseUpdate struct {
 
 // WarehouseUpdateStatus defines model for WarehouseUpdate.Status.
 type WarehouseUpdateStatus string
+
+// ListAssignmentsParams defines parameters for ListAssignments.
+type ListAssignmentsParams struct {
+	Status  *ListAssignmentsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	OrderId *openapi_types.UUID          `form:"orderId,omitempty" json:"orderId,omitempty"`
+}
+
+// ListAssignmentsParamsStatus defines parameters for ListAssignments.
+type ListAssignmentsParamsStatus string
 
 // ListOrdersParams defines parameters for ListOrders.
 type ListOrdersParams struct {
@@ -412,6 +517,9 @@ type RejectAssignmentJSONRequestBody = AssignmentReject
 // CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
 type CreateOrderJSONRequestBody = OrderCreate
 
+// UpdateDraftOrderJSONRequestBody defines body for UpdateDraftOrder for application/json ContentType.
+type UpdateDraftOrderJSONRequestBody = OrderDraftUpdate
+
 // CreateAssignmentJSONRequestBody defines body for CreateAssignment for application/json ContentType.
 type CreateAssignmentJSONRequestBody = AssignmentCreate
 
@@ -448,6 +556,12 @@ type CreateVehicleJSONRequestBody = VehicleCreate
 // UpdateVehicleJSONRequestBody defines body for UpdateVehicle for application/json ContentType.
 type UpdateVehicleJSONRequestBody = VehicleUpdate
 
+// CreateVehicleDocumentJSONRequestBody defines body for CreateVehicleDocument for application/json ContentType.
+type CreateVehicleDocumentJSONRequestBody = VehicleDocumentCreate
+
+// UpdateVehicleDocumentJSONRequestBody defines body for UpdateVehicleDocument for application/json ContentType.
+type UpdateVehicleDocumentJSONRequestBody = VehicleDocumentUpdate
+
 // CreateWarehouseJSONRequestBody defines body for CreateWarehouse for application/json ContentType.
 type CreateWarehouseJSONRequestBody = WarehouseCreate
 
@@ -456,6 +570,9 @@ type UpdateWarehouseJSONRequestBody = WarehouseUpdate
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Предложения водителя или назначения менеджера
+	// (GET /api/v1/assignments)
+	ListAssignments(w http.ResponseWriter, r *http.Request, params ListAssignmentsParams)
 	// Принять назначение
 	// (POST /api/v1/assignments/{id}/accept)
 	AcceptAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -480,6 +597,12 @@ type ServerInterface interface {
 	// Получить заявку
 	// (GET /api/v1/orders/{id})
 	GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Изменить груз и окно забора черновика
+	// (PATCH /api/v1/orders/{id})
+	UpdateDraftOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// История назначений заказа
+	// (GET /api/v1/orders/{id}/assignments)
+	ListOrderAssignments(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Предложить или заменить назначение
 	// (POST /api/v1/orders/{id}/assignments)
 	CreateAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -579,6 +702,15 @@ type ServerInterface interface {
 	// Обновить ТС
 	// (PUT /vehicles/{slug})
 	UpdateVehicle(w http.ResponseWriter, r *http.Request, slug string)
+
+	// (GET /vehicles/{slug}/documents)
+	ListVehicleDocuments(w http.ResponseWriter, r *http.Request, slug string)
+
+	// (POST /vehicles/{slug}/documents)
+	CreateVehicleDocument(w http.ResponseWriter, r *http.Request, slug string)
+
+	// (PATCH /vehicles/{slug}/documents/{id})
+	UpdateVehicleDocument(w http.ResponseWriter, r *http.Request, slug string, id openapi_types.UUID)
 	// Список складов
 	// (GET /warehouses)
 	ListWarehouses(w http.ResponseWriter, r *http.Request)
@@ -599,6 +731,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Предложения водителя или назначения менеджера
+// (GET /api/v1/assignments)
+func (_ Unimplemented) ListAssignments(w http.ResponseWriter, r *http.Request, params ListAssignmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Принять назначение
 // (POST /api/v1/assignments/{id}/accept)
@@ -645,6 +783,18 @@ func (_ Unimplemented) CreateOrder(w http.ResponseWriter, r *http.Request) {
 // Получить заявку
 // (GET /api/v1/orders/{id})
 func (_ Unimplemented) GetOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Изменить груз и окно забора черновика
+// (PATCH /api/v1/orders/{id})
+func (_ Unimplemented) UpdateDraftOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// История назначений заказа
+// (GET /api/v1/orders/{id}/assignments)
+func (_ Unimplemented) ListOrderAssignments(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -846,6 +996,21 @@ func (_ Unimplemented) UpdateVehicle(w http.ResponseWriter, r *http.Request, slu
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (GET /vehicles/{slug}/documents)
+func (_ Unimplemented) ListVehicleDocuments(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (POST /vehicles/{slug}/documents)
+func (_ Unimplemented) CreateVehicleDocument(w http.ResponseWriter, r *http.Request, slug string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PATCH /vehicles/{slug}/documents/{id})
+func (_ Unimplemented) UpdateVehicleDocument(w http.ResponseWriter, r *http.Request, slug string, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Список складов
 // (GET /warehouses)
 func (_ Unimplemented) ListWarehouses(w http.ResponseWriter, r *http.Request) {
@@ -884,6 +1049,41 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAssignments operation middleware
+func (siw *ServerInterfaceWrapper) ListAssignments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAssignmentsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "orderId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "orderId", r.URL.Query(), &params.OrderId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orderId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAssignments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // AcceptAssignment operation middleware
 func (siw *ServerInterfaceWrapper) AcceptAssignment(w http.ResponseWriter, r *http.Request) {
@@ -1075,6 +1275,56 @@ func (siw *ServerInterfaceWrapper) GetOrder(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateDraftOrder operation middleware
+func (siw *ServerInterfaceWrapper) UpdateDraftOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateDraftOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrderAssignments operation middleware
+func (siw *ServerInterfaceWrapper) ListOrderAssignments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrderAssignments(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1782,6 +2032,90 @@ func (siw *ServerInterfaceWrapper) UpdateVehicle(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListVehicleDocuments operation middleware
+func (siw *ServerInterfaceWrapper) ListVehicleDocuments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListVehicleDocuments(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateVehicleDocument operation middleware
+func (siw *ServerInterfaceWrapper) CreateVehicleDocument(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateVehicleDocument(w, r, slug)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateVehicleDocument operation middleware
+func (siw *ServerInterfaceWrapper) UpdateVehicleDocument(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "slug" -------------
+	var slug string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slug", chi.URLParam(r, "slug"), &slug, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slug", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateVehicleDocument(w, r, slug, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListWarehouses operation middleware
 func (siw *ServerInterfaceWrapper) ListWarehouses(w http.ResponseWriter, r *http.Request) {
 
@@ -1999,6 +2333,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/assignments", wrapper.ListAssignments)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/assignments/{id}/accept", wrapper.AcceptAssignment)
 	})
 	r.Group(func(r chi.Router) {
@@ -2021,6 +2358,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/orders/{id}", wrapper.GetOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/api/v1/orders/{id}", wrapper.UpdateDraftOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/assignments", wrapper.ListOrderAssignments)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/assignments", wrapper.CreateAssignment)
@@ -2120,6 +2463,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/vehicles/{slug}", wrapper.UpdateVehicle)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/vehicles/{slug}/documents", wrapper.ListVehicleDocuments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/vehicles/{slug}/documents", wrapper.CreateVehicleDocument)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/vehicles/{slug}/documents/{id}", wrapper.UpdateVehicleDocument)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/warehouses", wrapper.ListWarehouses)
