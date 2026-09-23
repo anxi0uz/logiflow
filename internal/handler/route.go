@@ -20,10 +20,23 @@ var upgrader = websocket.Upgrader{
 
 func (s *Server) GetRoute(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
+		return
+	}
+	if _, err := s.OrderSerice.GetOrder(ctx, id, claims.ID, claims.Role); err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
 	route, err := storage.GetOne[models.Route](ctx, s.DB, "routes", func(sb *sqlbuilder.SelectBuilder) {
 		sb.Where(sb.EQ("order_id", id))
 	})
 	if err != nil {
+		if err == storage.ErrNotFound {
+			s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+			return
+		}
 		slog.ErrorContext(ctx, "Error while getting route", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
@@ -33,10 +46,26 @@ func (s *Server) GetRoute(w http.ResponseWriter, r *http.Request, id openapi_typ
 
 func (s *Server) RouteWebSocket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
+		return
+	}
+	order, err := s.OrderSerice.GetOrder(ctx, id, claims.ID, claims.Role)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	route, err := storage.GetOne[models.Route](ctx, s.DB, "routes", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("order_id", id))
+	})
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "ws upgrade failed", slog.String("error", err.Error()))
-		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
 	}
 	defer func() {
@@ -52,22 +81,17 @@ func (s *Server) RouteWebSocket(w http.ResponseWriter, r *http.Request, id opena
 	s.Hub.mu.RLock()
 	_, trackerRunning := s.Hub.trackers[orderID]
 	s.Hub.mu.RUnlock()
-	if !trackerRunning {
+	if !trackerRunning && order.Status == models.OrderInTransit {
 		go s.startRouteTracker(orderID)
 	}
 
-	route, err := storage.GetOne[models.Route](r.Context(), s.DB, "routes", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("order_id", orderID))
-	})
-	if err == nil {
-		coords, err := route.ParseCoordinates()
-		if err == nil && route.CurrentIndex < len(coords) {
-			if err := conn.WriteJSON(map[string]any{
-				"current_index": route.CurrentIndex,
-				"coordinate":    coords[route.CurrentIndex],
-			}); err != nil {
-				slog.ErrorContext(ctx, "error while writing date to clients", slog.String("error", err.Error()))
-			}
+	coords, err := route.ParseCoordinates()
+	if err == nil && route.CurrentIndex < len(coords) {
+		if err := conn.WriteJSON(map[string]any{
+			"current_index": route.CurrentIndex,
+			"coordinate":    coords[route.CurrentIndex],
+		}); err != nil {
+			slog.ErrorContext(ctx, "error while writing date to clients", slog.String("error", err.Error()))
 		}
 	}
 
@@ -86,15 +110,24 @@ func (s *Server) startRouteTracker(orderID uuid.UUID) {
 			case <-ctx.Done():
 				return
 			case <-time.After(10 * time.Second):
+				order, err := storage.GetOne[models.Order](ctx, s.DB, "orders", func(sb *sqlbuilder.SelectBuilder) {
+					sb.Where(sb.EQ("id", orderID))
+				})
+				if err != nil || order.Status != models.OrderInTransit {
+					s.Hub.StopTracker(orderID)
+					return
+				}
 				route, err := storage.GetOne[models.Route](ctx, s.DB, "routes", func(sb *sqlbuilder.SelectBuilder) {
 					sb.Where(sb.EQ("order_id", orderID))
 				})
 				if err != nil {
+					s.Hub.StopTracker(orderID)
 					return
 				}
 
 				coords, err := route.ParseCoordinates()
 				if err != nil || len(coords) == 0 {
+					s.Hub.StopTracker(orderID)
 					return
 				}
 

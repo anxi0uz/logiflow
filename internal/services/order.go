@@ -26,7 +26,7 @@ type OrderService struct {
 	config config.Config
 }
 type OrderServicer interface {
-	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*CreateOrderResult, error)
+	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
 	GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
 	UpdateDraftOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error)
@@ -40,8 +40,8 @@ type OrderServicer interface {
 	StartAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
 	ArriveAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
 	CompleteAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
-	GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
-	GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error)
+	GetOrdersReport(ctx context.Context, userID uuid.UUID, role string, params api.GetOrdersReportParams) ([]models.Order, error)
+	GetDashboard(ctx context.Context, userID uuid.UUID, role string) (*models.DashboardReport, error)
 }
 
 var ErrCannotCancel = ErrInvalidOrderTransition
@@ -55,7 +55,19 @@ func NewOrderService(db *pgxpool.Pool, cfg config.Config) *OrderService {
 	return &OrderService{db: db, config: cfg}
 }
 
-func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*CreateOrderResult, error) {
+func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error) {
+	if role != "client" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+		if req.OriginWarehouseId == nil || *req.OriginWarehouseId != warehouseID {
+			return nil, ErrForbidden
+		}
+	}
 	if (req.OriginWarehouseId == nil && (req.OriginAddress == nil || *req.OriginAddress == "")) || req.DestinationAddress == "" ||
 		(req.WeightKg != nil && *req.WeightKg < 0) || (req.VolumeM3 != nil && *req.VolumeM3 < 0) ||
 		(req.PickupFrom != nil && req.PickupTo != nil && !req.PickupFrom.Before(*req.PickupTo)) {
@@ -203,7 +215,18 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 }
 
 func (s *OrderService) ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error) {
+	if role != "client" && role != "driver" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
 	var driverID *uuid.UUID
+	var warehouseID uuid.UUID
+	if role == "manager" {
+		var err error
+		warehouseID, err = s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if role == "driver" {
 		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) {
 			sb.Where(sb.EQ("user_id", userID))
@@ -220,13 +243,14 @@ func (s *OrderService) ListOrders(ctx context.Context, userID uuid.UUID, role st
 			sb.Where(sb.EQ("created_by_id", userID))
 		case "driver":
 			sb.Where(sb.EQ("driver_id", driverID))
-		default:
-			if params.Status != nil {
-				sb.Where(sb.EQ("status", params.Status))
-			}
-			if params.DriverId != nil {
-				sb.Where(sb.EQ("driver_id", params.DriverId))
-			}
+		case "manager":
+			sb.Where(sb.EQ("origin_warehouse_id", warehouseID))
+		}
+		if params.Status != nil {
+			sb.Where(sb.EQ("status", *params.Status))
+		}
+		if params.DriverId != nil {
+			sb.Where(sb.EQ("driver_id", *params.DriverId))
 		}
 	})
 
@@ -236,6 +260,9 @@ func (s *OrderService) ListOrders(ctx context.Context, userID uuid.UUID, role st
 	return orders, nil
 }
 func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error) {
+	if role != "client" && role != "driver" && role != "manager" && role != "admin" {
+		return nil, ErrForbidden
+	}
 	order, err := storage.GetOne[models.Order](ctx, s.db, "orders", func(sb *sqlbuilder.SelectBuilder) {
 		sb.Where(sb.EQ("id", id))
 	})
@@ -246,6 +273,15 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 
 	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
 		return nil, ErrForbidden
+	}
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
 	}
 	if role == "driver" {
 		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", userID)) })
@@ -258,11 +294,20 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 			return nil, ErrForbidden
 		}
 	}
-	if role != "client" && role != "driver" && role != "manager" && role != "admin" {
-		return nil, ErrForbidden
-	}
-
 	return order, nil
+}
+
+func (s *OrderService) managerWarehouseID(ctx context.Context, db storage.Querier, userID uuid.UUID) (uuid.UUID, error) {
+	manager, err := storage.GetOne[models.Manager](ctx, db, "managers", func(sb *sqlbuilder.SelectBuilder) {
+		sb.Where(sb.EQ("user_id", userID))
+	})
+	if errors.Is(err, storage.ErrNotFound) || (err == nil && manager.WarehouseID == nil) {
+		return uuid.Nil, ErrForbidden
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return *manager.WarehouseID, nil
 }
 
 func (s *OrderService) UpdateDraftOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error) {
@@ -285,6 +330,15 @@ func (s *OrderService) UpdateDraftOrder(ctx context.Context, id uuid.UUID, userI
 	}
 	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID) {
 		return nil, ErrForbidden
+	}
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
 	}
 	if order.Status != models.OrderDraft {
 		return nil, ErrInvalidOrderTransition
@@ -326,6 +380,14 @@ func (s *OrderService) ListAssignments(ctx context.Context, userID uuid.UUID, ro
 		return nil, ErrForbidden
 	}
 	var driverID uuid.UUID
+	var warehouseID uuid.UUID
+	if role == "manager" {
+		var err error
+		warehouseID, err = s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if role == "driver" {
 		driver, err := storage.GetOne[models.Driver](ctx, s.db, "drivers", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", userID)) })
 		if err != nil {
@@ -336,6 +398,9 @@ func (s *OrderService) ListAssignments(ctx context.Context, userID uuid.UUID, ro
 	return storage.GetAll[models.Assignment](ctx, "assignments", s.db, func(sb *sqlbuilder.SelectBuilder) {
 		if role == "driver" {
 			sb.Where(sb.EQ("driver_id", driverID))
+		}
+		if role == "manager" {
+			sb.Where("order_id IN (SELECT id FROM orders WHERE origin_warehouse_id = " + sb.Var(warehouseID) + ")")
 		}
 		if params.Status != nil {
 			sb.Where(sb.EQ("status", *params.Status))
@@ -358,11 +423,22 @@ func (s *OrderService) ListOrderAssignments(ctx context.Context, orderID uuid.UU
 		sb.Where(sb.EQ("order_id", orderID)).OrderBy("assigned_at DESC", "id DESC")
 	})
 }
-func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
-	if role != "manager" {
+func (s *OrderService) GetOrdersReport(ctx context.Context, userID uuid.UUID, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
+	if role != "manager" && role != "admin" {
 		return nil, ErrForbidden
 	}
+	var warehouseID uuid.UUID
+	if role == "manager" {
+		var err error
+		warehouseID, err = s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	orders, err := storage.GetAll[models.Order](ctx, "orders", s.db, func(sb *sqlbuilder.SelectBuilder) {
+		if role == "manager" {
+			sb.Where(sb.EQ("origin_warehouse_id", warehouseID))
+		}
 		if params.Status != nil {
 			sb.Where(sb.EQ("status", string(*params.Status)))
 		}
@@ -384,9 +460,17 @@ func (s *OrderService) GetOrdersReport(ctx context.Context, role string, params 
 	}
 	return orders, nil
 }
-func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error) {
+func (s *OrderService) GetDashboard(ctx context.Context, userID uuid.UUID, role string) (*models.DashboardReport, error) {
 	if role != "manager" && role != "admin" {
 		return nil, ErrForbidden
+	}
+	var warehouseID *uuid.UUID
+	if role == "manager" {
+		id, err := s.managerWarehouseID(ctx, s.db, userID)
+		if err != nil {
+			return nil, err
+		}
+		warehouseID = &id
 	}
 
 	var report models.DashboardReport
@@ -405,7 +489,8 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
                 COALESCE(SUM(total_price) FILTER (WHERE status = 'completed'
                     AND created_at >= date_trunc('month', NOW())), 0)                    AS revenue_this_month
             FROM orders
-        `)
+            WHERE ($1::uuid IS NULL OR origin_warehouse_id = $1)
+        `, warehouseID)
 		return row.Scan(
 			&report.Orders.Total,
 			&report.Orders.Delivered,
@@ -428,11 +513,12 @@ func (s *OrderService) GetDashboard(ctx context.Context, role string) (*models.D
                 COUNT(o.id) FILTER (WHERE o.status = 'completed') AS completed_orders
             FROM drivers d
             JOIN users u ON u.id = d.user_id
-            LEFT JOIN orders o ON o.driver_id = d.id
+            LEFT JOIN orders o ON o.driver_id = d.id AND ($1::uuid IS NULL OR o.origin_warehouse_id = $1)
+            WHERE $1::uuid IS NULL OR o.id IS NOT NULL
             GROUP BY d.id, u.full_name, d.status, d.rating
             ORDER BY completed_orders DESC
             LIMIT 10
-        `)
+        `, warehouseID)
 		if err != nil {
 			return err
 		}

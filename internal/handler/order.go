@@ -24,6 +24,10 @@ func (s *Server) ListOrders(w http.ResponseWriter, r *http.Request, params api.L
 	}
 	orders, err := s.OrderSerice.ListOrders(ctx, claims.ID, claims.Role, params)
 	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+			return
+		}
 		slog.ErrorContext(ctx, "Error while getting list of orders", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return
@@ -50,7 +54,7 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.OrderSerice.CreateOrder(ctx, req, claims.ID)
+	result, err := s.OrderSerice.CreateOrder(ctx, req, claims.ID, claims.Role)
 	if err != nil {
 		if _, ok := services.BusinessErrorCode(err); ok {
 			s.writeOrderServiceError(w, r, err)
@@ -183,7 +187,7 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 		return
 	}
 
-	orders, err := s.OrderSerice.GetOrdersReport(ctx, claims.Role, params)
+	orders, err := s.OrderSerice.GetOrdersReport(ctx, claims.ID, claims.Role, params)
 	if err != nil {
 		if errors.Is(err, services.ErrForbidden) {
 			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
@@ -242,7 +246,7 @@ func (s *Server) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	report, err := s.OrderSerice.GetDashboard(ctx, claims.Role)
+	report, err := s.OrderSerice.GetDashboard(ctx, claims.ID, claims.Role)
 	if err != nil {
 		if errors.Is(err, services.ErrForbidden) {
 			s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)

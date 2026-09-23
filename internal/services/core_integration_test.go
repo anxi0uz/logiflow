@@ -51,6 +51,13 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 			t.Fatalf("create user: %v", err)
 		}
 	}
+	warehouse := models.Warehouse{ID: uuid.New(), Name: "Smoke warehouse", Slug: "smoke-warehouse", Address: "Origin", City: "Test", Latitude: 60, Longitude: 30, CreatedAt: time.Now()}
+	if err := storage.Create(ctx, "warehouses", warehouse, pool); err != nil {
+		t.Fatalf("create warehouse: %v", err)
+	}
+	if err := storage.Create(ctx, "managers", models.Manager{ID: uuid.New(), UserID: managerID, WarehouseID: &warehouse.ID, Slug: "manager-smoke"}, pool); err != nil {
+		t.Fatalf("create manager: %v", err)
+	}
 
 	vehicle := models.Vehicle{ID: uuid.New(), PlateNumber: "SMOKE-001", Brand: "Test", Model: "Truck", Year: 2026, CapacityKg: 5000, CapacityM3: 30, Status: "available", Slug: "smoke-001"}
 	if err := storage.Create(ctx, "vehicles", vehicle, pool); err != nil {
@@ -72,8 +79,55 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	service := NewOrderService(pool, config.Config{})
 	plannedFrom := time.Now().Add(2 * time.Hour).Truncate(time.Second)
 	plannedTo := plannedFrom.Add(2 * time.Hour)
-	draft := createDraftOrder(t, ctx, pool, clientID, plannedFrom, plannedTo)
+	draft := createDraftOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom, plannedTo)
+	otherWarehouse := models.Warehouse{ID: uuid.New(), Name: "Other warehouse", Slug: "other-warehouse", Address: "Other", City: "Test", Latitude: 60, Longitude: 31, CreatedAt: time.Now()}
+	if err := storage.Create(ctx, "warehouses", otherWarehouse, pool); err != nil {
+		t.Fatalf("create other warehouse: %v", err)
+	}
+	otherDraft := createDraftOrder(t, ctx, pool, clientID, otherWarehouse.ID, plannedFrom, plannedTo)
 	newWeight := float32(200)
+	addressOnly := createDraftOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom, plannedTo)
+	addressOnly.OriginWarehouseID = nil
+	if err := storage.Update(ctx, "orders", addressOnly, pool, func(ub *sqlbuilder.UpdateBuilder) { ub.Where(ub.EQ("id", addressOnly.ID)) }); err != nil {
+		t.Fatalf("remove origin warehouse: %v", err)
+	}
+	visibleOrders, err := service.ListOrders(ctx, managerID, "manager", api.ListOrdersParams{})
+	if err != nil || len(visibleOrders) != 1 || visibleOrders[0].ID != draft.ID {
+		t.Fatalf("manager order scope: %+v err=%v", visibleOrders, err)
+	}
+	if _, err := service.ListOrders(ctx, uuid.New(), "manager", api.ListOrdersParams{}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager without warehouse saw orders: %v", err)
+	}
+	if _, err := service.GetOrder(ctx, otherDraft.ID, managerID, "manager"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager read other warehouse order: %v", err)
+	}
+	if _, err := service.GetOrder(ctx, addressOnly.ID, managerID, "manager"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager read address-only order: %v", err)
+	}
+	if _, err := service.UpdateDraftOrder(ctx, otherDraft.ID, managerID, "manager", api.OrderDraftUpdate{WeightKg: &newWeight}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager edited other warehouse draft: %v", err)
+	}
+	if _, err := service.SubmitOrder(ctx, otherDraft.ID, managerID, "manager"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager submitted other warehouse order: %v", err)
+	}
+	if _, err := service.CancelOrder(ctx, otherDraft.ID, managerID, "manager", api.OrderCancel{}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager cancelled other warehouse order: %v", err)
+	}
+	if _, err := service.CreateAssignment(ctx, otherDraft.ID, managerID, "manager", api.AssignmentCreate{DriverId: driver.ID, VehicleId: vehicle.ID, PlannedFrom: plannedFrom, PlannedTo: plannedTo}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager assigned other warehouse order: %v", err)
+	}
+	ordersReport, err := service.GetOrdersReport(ctx, managerID, "manager", api.GetOrdersReportParams{})
+	if err != nil || len(ordersReport) != 1 || ordersReport[0].ID != draft.ID {
+		t.Fatalf("manager report scope: %+v err=%v", ordersReport, err)
+	}
+	dashboard, err := service.GetDashboard(ctx, managerID, "manager")
+	if err != nil || dashboard.Orders.Total != 1 {
+		t.Fatalf("manager dashboard scope: %+v err=%v", dashboard, err)
+	}
+	adminDashboard, err := service.GetDashboard(ctx, clientID, "admin")
+	if err != nil || adminDashboard.Orders.Total != 3 {
+		t.Fatalf("admin dashboard scope: %+v err=%v", adminDashboard, err)
+	}
 	updated, err := service.UpdateDraftOrder(ctx, draft.ID, clientID, "client", api.OrderDraftUpdate{WeightKg: &newWeight})
 	if err != nil || updated.WeightKg != 200 {
 		t.Fatalf("update draft: order=%+v err=%v", updated, err)
@@ -94,8 +148,34 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create assignment: %v", err)
 	}
+	assignedAt := time.Now()
+	rejectedAt := assignedAt.Add(time.Minute)
+	otherAssignment := models.Assignment{
+		ID:              uuid.New(),
+		OrderID:         otherDraft.ID,
+		DriverID:        driver.ID,
+		VehicleID:       vehicle.ID,
+		Status:          models.AssignmentRejected,
+		PlannedFrom:     plannedFrom,
+		PlannedTo:       plannedTo,
+		CreatedByUserID: managerID,
+		Source:          "manual",
+		AssignedAt:      assignedAt,
+		OfferExpiresAt:  assignedAt.Add(15 * time.Minute),
+		RejectedAt:      &rejectedAt,
+	}
+	if err := storage.Create(ctx, "assignments", otherAssignment, pool); err != nil {
+		t.Fatalf("create other warehouse assignment: %v", err)
+	}
+	managerAssignments, err := service.ListAssignments(ctx, managerID, "manager", api.ListAssignmentsParams{})
+	if err != nil || len(managerAssignments) != 1 || managerAssignments[0].ID != assignment.ID {
+		t.Fatalf("manager assignment scope: %+v err=%v", managerAssignments, err)
+	}
+	if _, err := service.ListOrderAssignments(ctx, otherDraft.ID, managerID, "manager"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("manager assignment history for other warehouse: %v", err)
+	}
 	visible, err := service.ListAssignments(ctx, driverUserID, "driver", api.ListAssignmentsParams{})
-	if err != nil || len(visible) != 1 || visible[0].ID != assignment.ID {
+	if err != nil || len(visible) != 2 || (visible[0].ID != assignment.ID && visible[1].ID != assignment.ID) {
 		t.Fatalf("driver offers: %+v err=%v", visible, err)
 	}
 	if _, err := service.ListAssignments(ctx, clientID, "client", api.ListAssignmentsParams{}); !errors.Is(err, ErrForbidden) {
@@ -155,8 +235,8 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 		t.Fatalf("assignment lifecycle changed resource availability: driver=%s vehicle=%s", unchangedDriver.Status, unchangedVehicle.Status)
 	}
 
-	firstOrder := createReadyOrder(t, ctx, pool, clientID, plannedFrom.Add(24*time.Hour), plannedTo.Add(24*time.Hour))
-	secondOrder := createReadyOrder(t, ctx, pool, clientID, plannedFrom.Add(24*time.Hour), plannedTo.Add(24*time.Hour))
+	firstOrder := createReadyOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom.Add(24*time.Hour), plannedTo.Add(24*time.Hour))
+	secondOrder := createReadyOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom.Add(24*time.Hour), plannedTo.Add(24*time.Hour))
 	request := api.AssignmentCreate{DriverId: driver.ID, VehicleId: vehicle.ID, PlannedFrom: plannedFrom.Add(24 * time.Hour), PlannedTo: plannedTo.Add(24 * time.Hour)}
 	results := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -191,7 +271,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 		t.Fatalf("create second vehicle: %v", err)
 	}
 	laterFrom, laterTo := plannedFrom.Add(48*time.Hour), plannedTo.Add(48*time.Hour)
-	docOrder := createReadyOrder(t, ctx, pool, clientID, laterFrom, laterTo)
+	docOrder := createReadyOrder(t, ctx, pool, clientID, warehouse.ID, laterFrom, laterTo)
 	badRequest := api.AssignmentCreate{DriverId: driver.ID, VehicleId: missingDocumentVehicle.ID, PlannedFrom: laterFrom, PlannedTo: laterTo}
 	if _, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest); !errors.Is(err, ErrVehicleDocumentInvalid) {
 		t.Fatalf("vehicle without registration accepted: %v", err)
@@ -238,11 +318,12 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	}
 }
 
-func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID uuid.UUID, from, to time.Time) models.Order {
+func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID, warehouseID uuid.UUID, from, to time.Time) models.Order {
 	t.Helper()
 	order := models.Order{
 		ID:                 uuid.New(),
 		CreatedByID:        &clientID,
+		OriginWarehouseID:  &warehouseID,
 		OriginAddress:      "Origin",
 		DestinationAddress: "Destination",
 		CargoDescription:   "Smoke cargo",
@@ -260,9 +341,9 @@ func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 	return order
 }
 
-func createDraftOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID uuid.UUID, from, to time.Time) models.Order {
+func createDraftOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID, warehouseID uuid.UUID, from, to time.Time) models.Order {
 	t.Helper()
-	order := createReadyOrder(t, ctx, pool, clientID, from, to)
+	order := createReadyOrder(t, ctx, pool, clientID, warehouseID, from, to)
 	order.Status = models.OrderDraft
 	if err := storage.Update(ctx, "orders", order, pool, func(ub *sqlbuilder.UpdateBuilder) {
 		ub.Where(ub.EQ("id", order.ID))

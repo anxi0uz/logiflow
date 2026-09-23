@@ -312,7 +312,7 @@ components:
 
     ManagerCreate:
       type: object
-      required: [email, password, fullName]
+      required: [email, password, fullName, warehouseId]
       properties:
         email:
           type: string
@@ -325,7 +325,6 @@ components:
         warehouseId:
           type: string
           format: uuid
-          nullable: true
 
     # ─── Driver ───────────────────────────────────────────────────────────────
 
@@ -1048,6 +1047,7 @@ paths:
     post:
       operationId: createWarehouse
       summary: Создать склад
+      description: Только для роли admin.
       tags: [Warehouses]
       requestBody:
         required: true
@@ -1090,6 +1090,7 @@ paths:
     put:
       operationId: updateWarehouse
       summary: Обновить склад
+      description: Только для роли admin.
       tags: [Warehouses]
       requestBody:
         required: true
@@ -1108,6 +1109,7 @@ paths:
     delete:
       operationId: deleteWarehouse
       summary: Удалить склад
+      description: Только для роли admin.
       tags: [Warehouses]
       responses:
         "200":
@@ -1174,6 +1176,7 @@ paths:
     delete:
       operationId: deleteManager
       summary: Удалить менеджера
+      description: Только для роли admin.
       tags: [Managers]
       responses:
         "200":
@@ -1247,6 +1250,7 @@ paths:
     put:
       operationId: updateDriver
       summary: Обновить данные водителя
+      description: Только для роли admin.
       tags: [Drivers]
       requestBody:
         required: true
@@ -1265,6 +1269,7 @@ paths:
     delete:
       operationId: deleteDriver
       summary: Удалить водителя
+      description: Только для роли admin.
       tags: [Drivers]
       responses:
         "200":
@@ -1328,6 +1333,7 @@ paths:
       tags: [Orders]
       description: >
         Создаёт черновик заявки, геокодирует адреса через Nominatim и строит маршрут через OSRM.
+        Менеджер может создать заявку только для своего originWarehouseId.
         Координаты сохраняются в таблице routes.
       requestBody:
         required: true
@@ -1576,7 +1582,7 @@ paths:
       operationId: getRoute
       summary: Получить маршрут заявки
       tags: [Routes]
-      description: Возвращает весь маршрут с координатами и текущим индексом.
+      description: Возвращает весь маршрут с координатами и текущим индексом только пользователю с доступом к заказу.
       responses:
         "200":
           description: Данные маршрута
@@ -1601,9 +1607,8 @@ paths:
       summary: WebSocket трекинг маршрута
       tags: [Routes]
       description: >
-        Upgrades to WebSocket. Сервер отправляет RoutePosition каждые N секунд,
-        двигая current_index по массиву координат в горутине.
-        Соединение закрывается когда статус маршрута становится finished.
+        Проверяет доступ к заказу до WebSocket upgrade. Во время перевозки сервер
+        отправляет RoutePosition и двигает current_index по массиву координат.
       responses:
         "101":
           description: Switching Protocols — WebSocket установлен
@@ -1659,7 +1664,7 @@ paths:
       operationId: getOrdersReport
       summary: Отчёт по заявкам
       tags: [Reports]
-      description: Доступно для ролей admin и manager. Возвращает агрегированные данные по завершённым заявкам за период.
+      description: Доступно для ролей admin и manager. Менеджер получает только заказы своего склада; admin — все.
       parameters:
         - name: from
           in: query
@@ -1705,7 +1710,7 @@ paths:
     get:
       operationId: getDashboard
       summary: Дашборд менеджмента
-      description: Доступно для ролей admin и manager. Возвращает агрегированную статистику по выручке, заявкам и водителям.
+      description: Доступно для ролей admin и manager. Статистика менеджера ограничена заказами его склада.
       tags: [Reports]
       responses:
         "200":

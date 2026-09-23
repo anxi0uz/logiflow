@@ -200,6 +200,11 @@ func (s *Server) GetDriver(w http.ResponseWriter, r *http.Request, slug string) 
 
 func (s *Server) UpdateDriver(w http.ResponseWriter, r *http.Request, slug string) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	var req api.DriverUpdate
 
@@ -244,6 +249,11 @@ func (s *Server) UpdateDriver(w http.ResponseWriter, r *http.Request, slug strin
 
 func (s *Server) DeleteDriver(w http.ResponseWriter, r *http.Request, slug string) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	err := storage.Delete[models.Driver](ctx, "drivers", s.DB, func(sb *sqlbuilder.DeleteBuilder) {
 		sb.Where(sb.Equal("slug", slug))
