@@ -26,7 +26,7 @@ func TestCoreHTTPFlowSmoke(t *testing.T) {
 	assignment := models.Assignment{ID: assignmentID, OrderID: orderID, DriverID: uuid.New(), VehicleID: uuid.New()}
 
 	svc := &mockOrderService{
-		createOrder: func(_ context.Context, _ api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error) {
+		createOrder: func(_ context.Context, _ api.OrderCreate, userID uuid.UUID, _ string) (*services.CreateOrderResult, error) {
 			if userID != clientID {
 				t.Fatalf("create actor = %s", userID)
 			}

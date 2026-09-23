@@ -22,7 +22,7 @@ type mockOrderService struct {
 	updateDraftOrder     func(context.Context, uuid.UUID, uuid.UUID, string, api.OrderDraftUpdate) (*models.Order, error)
 	listAssignments      func(context.Context, uuid.UUID, string, api.ListAssignmentsParams) ([]models.Assignment, error)
 	listOrderAssignments func(context.Context, uuid.UUID, uuid.UUID, string) ([]models.Assignment, error)
-	createOrder          func(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error)
+	createOrder          func(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*services.CreateOrderResult, error)
 	listOrders           func(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
 	getOrder             func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
 	submitOrder          func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
@@ -33,8 +33,8 @@ type mockOrderService struct {
 	startAssignment      func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
 	arriveAssignment     func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Assignment, error)
 	completeAssignment   func(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
-	getOrdersReport      func(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error)
-	getDashboard         func(ctx context.Context, role string) (*models.DashboardReport, error)
+	getOrdersReport      func(ctx context.Context, userID uuid.UUID, role string, params api.GetOrdersReportParams) ([]models.Order, error)
+	getDashboard         func(ctx context.Context, userID uuid.UUID, role string) (*models.DashboardReport, error)
 }
 
 func (m *mockOrderService) UpdateDraftOrder(ctx context.Context, id, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error) {
@@ -47,8 +47,8 @@ func (m *mockOrderService) ListOrderAssignments(ctx context.Context, orderID, us
 	return m.listOrderAssignments(ctx, orderID, userID, role)
 }
 
-func (m *mockOrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID) (*services.CreateOrderResult, error) {
-	return m.createOrder(ctx, req, userID)
+func (m *mockOrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*services.CreateOrderResult, error) {
+	return m.createOrder(ctx, req, userID, role)
 }
 func (m *mockOrderService) ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error) {
 	return m.listOrders(ctx, userID, role, params)
@@ -80,11 +80,11 @@ func (m *mockOrderService) ArriveAssignment(ctx context.Context, id uuid.UUID, u
 func (m *mockOrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error) {
 	return m.completeAssignment(ctx, id, userID, role, req)
 }
-func (m *mockOrderService) GetOrdersReport(ctx context.Context, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
-	return m.getOrdersReport(ctx, role, params)
+func (m *mockOrderService) GetOrdersReport(ctx context.Context, userID uuid.UUID, role string, params api.GetOrdersReportParams) ([]models.Order, error) {
+	return m.getOrdersReport(ctx, userID, role, params)
 }
-func (m *mockOrderService) GetDashboard(ctx context.Context, role string) (*models.DashboardReport, error) {
-	return m.getDashboard(ctx, role)
+func (m *mockOrderService) GetDashboard(ctx context.Context, userID uuid.UUID, role string) (*models.DashboardReport, error) {
+	return m.getDashboard(ctx, userID, role)
 }
 
 // --- Helpers ---
@@ -115,7 +115,7 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 func TestCreateOrder_Success(t *testing.T) {
 	orderID := uuid.New()
 	svc := &mockOrderService{
-		createOrder: func(_ context.Context, _ api.OrderCreate, _ uuid.UUID) (*services.CreateOrderResult, error) {
+		createOrder: func(_ context.Context, _ api.OrderCreate, _ uuid.UUID, _ string) (*services.CreateOrderResult, error) {
 			return &services.CreateOrderResult{
 				Order: models.Order{ID: orderID, Status: models.OrderDraft},
 				Route: models.Route{ID: uuid.New(), OrderID: orderID},
@@ -160,7 +160,7 @@ func TestUpdateDraftOrderRejectsUnsupportedAddressEdit(t *testing.T) {
 
 func TestCreateOrder_ServiceError(t *testing.T) {
 	svc := &mockOrderService{
-		createOrder: func(_ context.Context, _ api.OrderCreate, _ uuid.UUID) (*services.CreateOrderResult, error) {
+		createOrder: func(_ context.Context, _ api.OrderCreate, _ uuid.UUID, _ string) (*services.CreateOrderResult, error) {
 			return nil, errors.New("geocode failed")
 		},
 	}
@@ -399,7 +399,7 @@ func TestCompleteAssignment_PassesDeliveryPayload(t *testing.T) {
 
 func TestGetOrdersReport_Success(t *testing.T) {
 	svc := &mockOrderService{
-		getOrdersReport: func(_ context.Context, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
+		getOrdersReport: func(_ context.Context, _ uuid.UUID, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
 			return []models.Order{{ID: uuid.New(), Status: models.OrderCompleted}}, nil
 		},
 	}
@@ -417,7 +417,7 @@ func TestGetOrdersReport_Success(t *testing.T) {
 
 func TestGetOrdersReport_Forbidden(t *testing.T) {
 	svc := &mockOrderService{
-		getOrdersReport: func(_ context.Context, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
+		getOrdersReport: func(_ context.Context, _ uuid.UUID, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
 			return nil, services.ErrForbidden
 		},
 	}
@@ -435,7 +435,7 @@ func TestGetOrdersReport_Forbidden(t *testing.T) {
 
 func TestGetOrdersReport_ServiceError(t *testing.T) {
 	svc := &mockOrderService{
-		getOrdersReport: func(_ context.Context, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
+		getOrdersReport: func(_ context.Context, _ uuid.UUID, _ string, _ api.GetOrdersReportParams) ([]models.Order, error) {
 			return nil, errors.New("db error")
 		},
 	}
@@ -455,7 +455,7 @@ func TestGetOrdersReport_ServiceError(t *testing.T) {
 
 func TestGetDashboard_Success(t *testing.T) {
 	svc := &mockOrderService{
-		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+		getDashboard: func(_ context.Context, _ uuid.UUID, _ string) (*models.DashboardReport, error) {
 			return &models.DashboardReport{
 				Revenue: models.DashboardRevenue{Total: 10000, ThisMonth: 3000},
 				Orders:  models.DashboardOrderStatus{Total: 5, Delivered: 3, Pending: 2},
@@ -477,7 +477,7 @@ func TestGetDashboard_Success(t *testing.T) {
 
 func TestGetDashboard_Forbidden(t *testing.T) {
 	svc := &mockOrderService{
-		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+		getDashboard: func(_ context.Context, _ uuid.UUID, _ string) (*models.DashboardReport, error) {
 			return nil, services.ErrForbidden
 		},
 	}
@@ -495,7 +495,7 @@ func TestGetDashboard_Forbidden(t *testing.T) {
 
 func TestGetDashboard_ServiceError(t *testing.T) {
 	svc := &mockOrderService{
-		getDashboard: func(_ context.Context, _ string) (*models.DashboardReport, error) {
+		getDashboard: func(_ context.Context, _ uuid.UUID, _ string) (*models.DashboardReport, error) {
 			return nil, errors.New("db error")
 		},
 	}

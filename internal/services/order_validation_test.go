@@ -19,7 +19,7 @@ func TestCreateOrderRejectsInvalidInputBeforeExternalCalls(t *testing.T) {
 		{OriginAddress: &origin, DestinationAddress: "Destination", WeightKg: &negative},
 		{OriginAddress: &origin, DestinationAddress: "Destination", PickupFrom: &now, PickupTo: &now},
 	} {
-		_, err := (&OrderService{}).CreateOrder(context.Background(), req, uuid.New())
+		_, err := (&OrderService{}).CreateOrder(context.Background(), req, uuid.New(), "client")
 		if !errors.Is(err, ErrInvalidOrderInput) {
 			t.Fatalf("invalid order accepted: %+v, err=%v", req, err)
 		}

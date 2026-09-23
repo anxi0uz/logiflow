@@ -31,6 +31,11 @@ func (s *Server) ListWarehouses(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	var req api.WarehouseCreate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -87,6 +92,11 @@ func (s *Server) GetWarehouse(w http.ResponseWriter, r *http.Request, slug strin
 
 func (s *Server) UpdateWarehouse(w http.ResponseWriter, r *http.Request, slug string) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 	var req api.WarehouseUpdate
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -126,6 +136,11 @@ func (s *Server) UpdateWarehouse(w http.ResponseWriter, r *http.Request, slug st
 
 func (s *Server) DeleteWarehouse(w http.ResponseWriter, r *http.Request, slug string) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	if err := storage.Delete[models.Warehouse](ctx, "warehouses", s.DB, func(sb *sqlbuilder.DeleteBuilder) {
 		sb.Where(sb.EQ("slug", slug))

@@ -30,11 +30,20 @@ func (s *Server) ListManagers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	var req api.ManagerCreate
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.ErrorContext(ctx, "Error while decoding body", slog.Any("request", req), slog.String("Error", err.Error()))
+		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
+		return
+	}
+	if req.WarehouseId == uuid.Nil {
 		s.JSON(w, r, http.StatusBadRequest, MsgInvalidBody, RespError)
 		return
 	}
@@ -84,7 +93,7 @@ func (s *Server) CreateManager(w http.ResponseWriter, r *http.Request) {
 	managerid := uuid.New()
 	managerModel := models.Manager{
 		ID:          managerid,
-		WarehouseID: req.WarehouseId,
+		WarehouseID: &req.WarehouseId,
 		UserID:      userid,
 		Slug:        s.GenerateUserSlug(req.FullName, managerid),
 	}
@@ -129,6 +138,11 @@ func (s *Server) GetManager(w http.ResponseWriter, r *http.Request, slug string)
 
 func (s *Server) DeleteManager(w http.ResponseWriter, r *http.Request, slug string) {
 	ctx := r.Context()
+	claims, ok := ctx.Value(UserKey).(*Claims)
+	if !ok || claims.Role != "admin" {
+		s.JSON(w, r, http.StatusForbidden, MsgForbidden, RespError)
+		return
+	}
 
 	err := storage.Delete[models.Manager](ctx, "managers", s.DB, func(db *sqlbuilder.DeleteBuilder) {
 		db.Where(db.EQ("slug", slug))

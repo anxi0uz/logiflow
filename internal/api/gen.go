@@ -350,7 +350,7 @@ type ManagerCreate struct {
 	Email       openapi_types.Email `json:"email"`
 	FullName    string              `json:"fullName"`
 	Password    string              `json:"password"`
-	WarehouseId *openapi_types.UUID `json:"warehouseId,omitempty"`
+	WarehouseId openapi_types.UUID  `json:"warehouseId"`
 }
 
 // OrderCancel defines model for OrderCancel.

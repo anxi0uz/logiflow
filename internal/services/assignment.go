@@ -32,6 +32,15 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 	if role != "manager" && role != "admin" && (role != "client" || order.CreatedByID == nil || *order.CreatedByID != userID) {
 		return nil, ErrForbidden
 	}
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
+	}
 	if !models.CanTransitionOrder(order.Status, models.OrderReadyForDispatch) {
 		return nil, ErrInvalidOrderTransition
 	}
@@ -109,6 +118,15 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 	}
 
 	// Revalidate ownership and state after the full lock set is held.
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
+	}
 	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID || (order.Status != models.OrderDraft && order.Status != models.OrderReadyForDispatch)) {
 		return nil, ErrForbidden
 	}
@@ -159,6 +177,11 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, userID uuid.UUID, role string, req api.AssignmentCreate) (*models.Assignment, error) {
 	if role != "manager" && role != "admin" {
 		return nil, ErrForbidden
+	}
+	if role == "manager" {
+		if _, err := s.GetOrder(ctx, orderID, userID, role); err != nil {
+			return nil, err
+		}
 	}
 	if !req.PlannedFrom.Before(req.PlannedTo) || req.PlannedFrom.Before(time.Now()) {
 		return nil, ErrInvalidTimeWindow
@@ -238,6 +261,15 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 	}
 
 	// Everything below is validated only after the complete lock set is held.
+	if role == "manager" {
+		warehouseID, err := s.managerWarehouseID(ctx, tx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+			return nil, ErrForbidden
+		}
+	}
 	if previous == nil {
 		if order.Status != models.OrderReadyForDispatch {
 			return nil, ErrInvalidOrderTransition
