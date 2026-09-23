@@ -10,7 +10,7 @@ type User struct {
 	ID           uuid.UUID  `db:"id"`
 	Email        string     `db:"email"`
 	Slug         string     `db:"slug"`
-	PasswordHash string     `db:"password_hash"`
+	PasswordHash string     `db:"password_hash" json:"-"`
 	FullName     string     `db:"full_name"`
 	AvatarURL    string     `db:"avatar_url"`
 	Role         string     `db:"role"`

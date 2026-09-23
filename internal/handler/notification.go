@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -46,13 +47,13 @@ func (s *Server) MarkNotificationRead(w http.ResponseWriter, r *http.Request, id
 	notification, err := storage.GetOne[models.Notification](ctx, s.DB, "notifications", func(sb *sqlbuilder.SelectBuilder) {
 		sb.Where(sb.EQ("id", id))
 	})
+	if errors.Is(err, storage.ErrNotFound) {
+		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
+		return
+	}
 	if err != nil {
 		slog.ErrorContext(ctx, "Error while getting notification", slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
-		return
-	}
-	if notification == nil {
-		s.JSON(w, r, http.StatusNotFound, MsgNotFound, RespNotFound)
 		return
 	}
 	if notification.UserID != claims.ID {
