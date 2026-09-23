@@ -10,16 +10,6 @@ import (
 	"strconv"
 )
 
-type OsrmResult struct {
-	Routes []struct {
-		Geometry struct {
-			Coordinates [][]float64 `json:"coordinates"`
-		} `json:"geometry"`
-		Distance float64 `json:"distance"`
-		Duration float64 `json:"duration"`
-	} `json:"routes"`
-}
-
 func Geocode(ctx context.Context, address string) (lat, lon float64, err error) {
 	url := fmt.Sprintf(
 		"https://nominatim.openstreetmap.org/search?q=%s&format=json&limit=1",

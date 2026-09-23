@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"time"
 
 	api "github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
-	"github.com/anxi0uz/logiflow/pkg/geocode"
+	"github.com/anxi0uz/logiflow/pkg/routing"
 	"github.com/google/uuid"
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
@@ -22,8 +21,9 @@ import (
 )
 
 type OrderService struct {
-	db     *pgxpool.Pool
-	config config.Config
+	db           *pgxpool.Pool
+	config       config.Config
+	routePlanner routing.Planner
 }
 type OrderServicer interface {
 	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error)
@@ -52,7 +52,14 @@ type CreateOrderResult struct {
 }
 
 func NewOrderService(db *pgxpool.Pool, cfg config.Config) *OrderService {
-	return &OrderService{db: db, config: cfg}
+	return &OrderService{db: db, config: cfg, routePlanner: routing.OSRMPlanner{}}
+}
+
+func (s *OrderService) orderPrice(distanceKm, weightKg, volumeM3 float64) float64 {
+	return s.config.Pricing.BaseFee +
+		distanceKm*s.config.Pricing.PerKm +
+		weightKg*s.config.Pricing.PerKg +
+		volumeM3*s.config.Pricing.PerM3
 }
 
 func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error) {
@@ -73,73 +80,33 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		(req.PickupFrom != nil && req.PickupTo != nil && !req.PickupFrom.Before(*req.PickupTo)) {
 		return nil, ErrInvalidOrderInput
 	}
-	var (
-		originLat, originLon float64
-		destLat, destLon     float64
-	)
-	g, gctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		if req.OriginWarehouseId != nil {
-			wh, err := storage.GetOne[models.Warehouse](gctx, s.db, "warehouses", func(sb *sqlbuilder.SelectBuilder) {
-				sb.Where(sb.Equal("id", req.OriginWarehouseId))
-			})
-			if err != nil {
-				return err
-			}
-			originLat = wh.Latitude
-			originLon = wh.Longitude
-			return nil
-		}
-
-		var err error
-		originLat, originLon, err = geocode.Geocode(gctx, *req.OriginAddress)
-		return err
-	})
-	g.Go(func() error {
-		if req.DestinationWarehouseId != nil {
-			wh, err := storage.GetOne[models.Warehouse](gctx, s.db, "warehouses", func(sb *sqlbuilder.SelectBuilder) {
-				sb.Where(sb.Equal("id", req.DestinationWarehouseId))
-			})
-			if err != nil {
-				return err
-			}
-			destLat = wh.Latitude
-			destLon = wh.Longitude
-			return nil
-		}
-		var err error
-		destLat, destLon, err = geocode.Geocode(gctx, req.DestinationAddress)
-		return err
-	})
-
-	if err := g.Wait(); err != nil {
-		slog.ErrorContext(ctx, "error while getting coordinates", slog.String("error", err.Error()))
-		return nil, fmt.Errorf("error while getting coordinates: %w", err)
+	origin := routing.Endpoint{}
+	if req.OriginAddress != nil {
+		origin.Address = *req.OriginAddress
 	}
-	osrmURL := fmt.Sprintf(
-		"http://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f?overview=full&geometries=geojson",
-		originLon, originLat, destLon, destLat,
-	)
-	osrmReq, _ := http.NewRequestWithContext(ctx, http.MethodGet, osrmURL, nil)
-	osrmReq.Header.Set("User-Agent", "logiflow/1.0")
-
-	osrmResp, err := http.DefaultClient.Do(osrmReq)
+	if req.OriginWarehouseId != nil {
+		warehouse, err := storage.GetOne[models.Warehouse](ctx, s.db, "warehouses", func(sb *sqlbuilder.SelectBuilder) {
+			sb.Where(sb.EQ("id", *req.OriginWarehouseId))
+		})
+		if err != nil {
+			return nil, err
+		}
+		origin.Coordinates = &routing.Coordinates{Latitude: warehouse.Latitude, Longitude: warehouse.Longitude}
+	}
+	destination := routing.Endpoint{Address: req.DestinationAddress}
+	if req.DestinationWarehouseId != nil {
+		warehouse, err := storage.GetOne[models.Warehouse](ctx, s.db, "warehouses", func(sb *sqlbuilder.SelectBuilder) {
+			sb.Where(sb.EQ("id", *req.DestinationWarehouseId))
+		})
+		if err != nil {
+			return nil, err
+		}
+		destination.Coordinates = &routing.Coordinates{Latitude: warehouse.Latitude, Longitude: warehouse.Longitude}
+	}
+	estimate, err := s.routePlanner.Plan(ctx, origin, destination)
 	if err != nil {
-		return nil, fmt.Errorf("osrm request: %w", err)
+		return nil, err
 	}
-	defer func() {
-		if err := osrmResp.Body.Close(); err != nil {
-			slog.Warn("failed to close response body", slog.String("error", err.Error()))
-		}
-	}()
-
-	var osrmResult geocode.OsrmResult
-	if err := json.NewDecoder(osrmResp.Body).Decode(&osrmResult); err != nil || len(osrmResult.Routes) == 0 {
-		return nil, fmt.Errorf("osrm: no route found")
-	}
-	route := osrmResult.Routes[0]
-	distanceKm := route.Distance / 1000
 
 	var weightKg, volumeM3 float64
 	if req.WeightKg != nil {
@@ -148,10 +115,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 	if req.VolumeM3 != nil {
 		volumeM3 = float64(*req.VolumeM3)
 	}
-	price := s.config.Pricing.BaseFee +
-		distanceKm*s.config.Pricing.PerKm +
-		weightKg*s.config.Pricing.PerKg +
-		volumeM3*s.config.Pricing.PerM3
+	price := s.orderPrice(estimate.DistanceKm, weightKg, volumeM3)
 
 	orderID := uuid.New()
 	order := models.Order{
@@ -178,7 +142,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		order.VolumeM3 = volumeM3
 	}
 
-	coordsJSON, err := json.Marshal(route.Geometry.Coordinates)
+	coordsJSON, err := json.Marshal(estimate.Coordinates)
 	if err != nil {
 		return nil, fmt.Errorf("marshal coordinates: %w", err)
 	}
@@ -186,8 +150,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		ID:          uuid.New(),
 		OrderID:     orderID,
 		Coordinates: coordsJSON,
-		DurationSec: int(route.Duration),
-		DistanceKm:  distanceKm,
+		DurationSec: estimate.DurationSec,
+		DistanceKm:  estimate.DistanceKm,
 		Status:      "pending",
 	}
 
@@ -372,7 +336,7 @@ func (s *OrderService) UpdateDraftOrder(ctx context.Context, id uuid.UUID, userI
 	if err != nil {
 		return nil, err
 	}
-	order.TotalPrice = s.config.Pricing.BaseFee + route.DistanceKm*s.config.Pricing.PerKm + order.WeightKg*s.config.Pricing.PerKg + order.VolumeM3*s.config.Pricing.PerM3
+	order.TotalPrice = s.orderPrice(route.DistanceKm, order.WeightKg, order.VolumeM3)
 	if err := storage.Update(ctx, "orders", *order, tx, func(ub *sqlbuilder.UpdateBuilder) { ub.Where(ub.EQ("id", id)) }); err != nil {
 		return nil, err
 	}
