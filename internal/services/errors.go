@@ -20,6 +20,8 @@ var (
 	ErrVehicleNotOperational   = &BusinessError{Code: "VEHICLE_NOT_OPERATIONAL"}
 	ErrVehicleCapacityExceeded = &BusinessError{Code: "VEHICLE_CAPACITY_EXCEEDED"}
 	ErrInvalidTimeWindow       = &BusinessError{Code: "INVALID_TIME_WINDOW"}
+	ErrInvalidOrderInput       = &BusinessError{Code: "INVALID_ORDER_INPUT"}
+	ErrVehicleDocumentInvalid  = &BusinessError{Code: "VEHICLE_DOCUMENT_INVALID"}
 )
 
 func BusinessErrorCode(err error) (string, bool) {

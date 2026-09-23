@@ -64,14 +64,26 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err := storage.Create(ctx, "driver_documents", document, pool); err != nil {
 		t.Fatalf("create driver document: %v", err)
 	}
+	vehicleDocument := models.VehicleDocument{ID: uuid.New(), VehicleID: vehicle.ID, Type: "registration", Number: "SMOKE-REG", ValidUntil: time.Now().AddDate(1, 0, 0), Status: "valid", CreatedAt: time.Now()}
+	if err := storage.Create(ctx, "vehicle_documents", vehicleDocument, pool); err != nil {
+		t.Fatalf("create vehicle document: %v", err)
+	}
 
 	service := NewOrderService(pool, config.Config{})
 	plannedFrom := time.Now().Add(2 * time.Hour).Truncate(time.Second)
 	plannedTo := plannedFrom.Add(2 * time.Hour)
 	draft := createDraftOrder(t, ctx, pool, clientID, plannedFrom, plannedTo)
+	newWeight := float32(200)
+	updated, err := service.UpdateDraftOrder(ctx, draft.ID, clientID, "client", api.OrderDraftUpdate{WeightKg: &newWeight})
+	if err != nil || updated.WeightKg != 200 {
+		t.Fatalf("update draft: order=%+v err=%v", updated, err)
+	}
 	order, err := service.SubmitOrder(ctx, draft.ID, clientID, "client")
 	if err != nil {
 		t.Fatalf("submit order: %v", err)
+	}
+	if _, err := service.UpdateDraftOrder(ctx, draft.ID, clientID, "client", api.OrderDraftUpdate{WeightKg: &newWeight}); !errors.Is(err, ErrInvalidOrderTransition) {
+		t.Fatalf("submitted draft editable: %v", err)
 	}
 	assignment, err := service.CreateAssignment(ctx, order.ID, managerID, "manager", api.AssignmentCreate{
 		DriverId:    driver.ID,
@@ -82,8 +94,33 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create assignment: %v", err)
 	}
+	visible, err := service.ListAssignments(ctx, driverUserID, "driver", api.ListAssignmentsParams{})
+	if err != nil || len(visible) != 1 || visible[0].ID != assignment.ID {
+		t.Fatalf("driver offers: %+v err=%v", visible, err)
+	}
+	if _, err := service.ListAssignments(ctx, clientID, "client", api.ListAssignmentsParams{}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("client assignments visible: %v", err)
+	}
+	history, err := service.ListOrderAssignments(ctx, order.ID, managerID, "manager")
+	if err != nil || len(history) != 1 {
+		t.Fatalf("manager assignment history: %+v err=%v", history, err)
+	}
+	notices, err := storage.GetAll[models.Notification](ctx, "notifications", pool, func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", driverUserID)) })
+	if err != nil || len(notices) != 1 {
+		t.Fatalf("driver offer notification: %+v err=%v", notices, err)
+	}
+	if _, err := service.AcceptAssignment(ctx, assignment.ID, clientID, "driver"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("wrong driver accepted: %v", err)
+	}
+	managerNotices, err := storage.GetAll[models.Notification](ctx, "notifications", pool, func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", managerID)) })
+	if err != nil || len(managerNotices) != 0 {
+		t.Fatalf("failed accept produced notification: %+v err=%v", managerNotices, err)
+	}
 	if _, err := service.AcceptAssignment(ctx, assignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("accept assignment: %v", err)
+	}
+	if _, err := service.AcceptAssignment(ctx, assignment.ID, driverUserID, "driver"); !errors.Is(err, ErrAssignmentStale) {
+		t.Fatalf("double accept: %v", err)
 	}
 	if _, err := service.StartAssignment(ctx, assignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("start assignment: %v", err)
@@ -95,6 +132,13 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	comment := "received intact"
 	if _, err := service.CompleteAssignment(ctx, assignment.ID, driverUserID, "driver", api.DeliveryComplete{RecipientName: &recipient, Comment: &comment}); err != nil {
 		t.Fatalf("complete assignment: %v", err)
+	}
+	if _, err := service.CompleteAssignment(ctx, assignment.ID, driverUserID, "driver", api.DeliveryComplete{}); !errors.Is(err, ErrInvalidOrderTransition) {
+		t.Fatalf("double complete: %v", err)
+	}
+	clientNotices, err := storage.GetAll[models.Notification](ctx, "notifications", pool, func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", clientID)) })
+	if err != nil || len(clientNotices) != 4 {
+		t.Fatalf("delivery notifications: %+v err=%v", clientNotices, err)
 	}
 
 	completedOrder, err := storage.GetOne[models.Order](ctx, pool, "orders", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", order.ID)) })
@@ -140,6 +184,57 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	}
 	if success != 1 || conflicts != 1 {
 		t.Fatalf("concurrent assignment results: success=%d conflicts=%d", success, conflicts)
+	}
+
+	missingDocumentVehicle := models.Vehicle{ID: uuid.New(), PlateNumber: "SMOKE-002", CapacityKg: 5000, CapacityM3: 30, Status: "available", Slug: "smoke-002"}
+	if err := storage.Create(ctx, "vehicles", missingDocumentVehicle, pool); err != nil {
+		t.Fatalf("create second vehicle: %v", err)
+	}
+	laterFrom, laterTo := plannedFrom.Add(48*time.Hour), plannedTo.Add(48*time.Hour)
+	docOrder := createReadyOrder(t, ctx, pool, clientID, laterFrom, laterTo)
+	badRequest := api.AssignmentCreate{DriverId: driver.ID, VehicleId: missingDocumentVehicle.ID, PlannedFrom: laterFrom, PlannedTo: laterTo}
+	if _, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest); !errors.Is(err, ErrVehicleDocumentInvalid) {
+		t.Fatalf("vehicle without registration accepted: %v", err)
+	}
+	if err := storage.Create(ctx, "vehicle_documents", models.VehicleDocument{ID: uuid.New(), VehicleID: missingDocumentVehicle.ID, Type: "registration", Number: "EXPIRED", ValidUntil: time.Now().AddDate(0, 0, -1), Status: "valid", CreatedAt: time.Now()}, pool); err != nil {
+		t.Fatalf("create expired document: %v", err)
+	}
+	if _, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest); !errors.Is(err, ErrVehicleDocumentInvalid) {
+		t.Fatalf("expired registration accepted: %v", err)
+	}
+	if err := storage.Create(ctx, "vehicle_documents", models.VehicleDocument{ID: uuid.New(), VehicleID: missingDocumentVehicle.ID, Type: "registration", Number: "VALID", ValidUntil: time.Now().AddDate(1, 0, 0), Status: "valid", CreatedAt: time.Now()}, pool); err != nil {
+		t.Fatalf("create valid document: %v", err)
+	}
+	offer, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest)
+	if err != nil {
+		t.Fatalf("create assignment with valid registration: %v", err)
+	}
+	if _, err := service.RejectAssignment(ctx, offer.ID, driverUserID, "driver", api.AssignmentReject{ReasonCode: "unavailable"}); err != nil {
+		t.Fatalf("reject assignment: %v", err)
+	}
+	secondOffer, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest)
+	if err != nil {
+		t.Fatalf("reassign after rejection: %v", err)
+	}
+	badRequest.ReplacesAssignmentId = &secondOffer.ID
+	replacedOffer, err := service.CreateAssignment(ctx, docOrder.ID, managerID, "manager", badRequest)
+	if err != nil {
+		t.Fatalf("replace pending offer: %v", err)
+	}
+	replaced, err := storage.GetOne[models.Assignment](ctx, pool, "assignments", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", secondOffer.ID)) })
+	if err != nil || replaced.Status != models.AssignmentReleased {
+		t.Fatalf("replacement did not release old offer: %+v err=%v", replaced, err)
+	}
+	if _, err := service.CancelOrder(ctx, docOrder.ID, managerID, "manager", api.OrderCancel{}); err != nil {
+		t.Fatalf("cancel assignment: %v", err)
+	}
+	released, err := storage.GetOne[models.Assignment](ctx, pool, "assignments", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", replacedOffer.ID)) })
+	if err != nil || released.Status != models.AssignmentReleased {
+		t.Fatalf("cancel did not release reservation: %+v err=%v", released, err)
+	}
+	history, err = service.ListOrderAssignments(ctx, docOrder.ID, managerID, "manager")
+	if err != nil || len(history) != 3 {
+		t.Fatalf("rejection history lost: %+v err=%v", history, err)
 	}
 }
 

@@ -32,6 +32,25 @@ func TestCoreHTTPFlowSmoke(t *testing.T) {
 			}
 			return &services.CreateOrderResult{Order: order}, nil
 		},
+		updateDraftOrder: func(_ context.Context, id, userID uuid.UUID, role string, req api.OrderDraftUpdate) (*models.Order, error) {
+			if id != orderID || userID != clientID || role != "client" || req.WeightKg == nil || *req.WeightKg != 200 || order.Status != models.OrderDraft {
+				t.Fatalf("unexpected draft edit: %+v", req)
+			}
+			order.WeightKg = float64(*req.WeightKg)
+			return &order, nil
+		},
+		listAssignments: func(_ context.Context, userID uuid.UUID, role string, _ api.ListAssignmentsParams) ([]models.Assignment, error) {
+			if userID != driverUserID || role != "driver" || assignment.Status != models.AssignmentPendingAcceptance {
+				t.Fatalf("unexpected driver offers")
+			}
+			return []models.Assignment{assignment}, nil
+		},
+		listOrderAssignments: func(_ context.Context, id, userID uuid.UUID, role string) ([]models.Assignment, error) {
+			if id != orderID || userID != managerID || role != "manager" {
+				t.Fatalf("unexpected manager history")
+			}
+			return []models.Assignment{assignment}, nil
+		},
 		submitOrder: func(_ context.Context, id uuid.UUID, _ uuid.UUID, _ string) (*models.Order, error) {
 			if id != orderID || order.Status != models.OrderDraft {
 				t.Fatalf("unexpected submit state: %+v", order)
@@ -94,27 +113,31 @@ func TestCoreHTTPFlowSmoke(t *testing.T) {
 	from := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 	to := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
 	steps := []struct {
-		path string
-		role string
-		body string
-		want int
+		method string
+		path   string
+		role   string
+		body   string
+		want   int
 	}{
-		{"/api/v1/orders", "client", `{"destinationAddress":"Destination"}`, http.StatusCreated},
-		{"/api/v1/orders/" + orderID.String() + "/submit", "client", "", http.StatusOK},
-		{"/api/v1/orders/" + orderID.String() + "/assignments", "manager", `{"driverId":"` + assignment.DriverID.String() + `","vehicleId":"` + assignment.VehicleID.String() + `","plannedFrom":"` + from + `","plannedTo":"` + to + `"}`, http.StatusCreated},
-		{"/api/v1/assignments/" + assignmentID.String() + "/accept", "driver", "", http.StatusOK},
-		{"/api/v1/assignments/" + assignmentID.String() + "/start", "driver", "", http.StatusOK},
-		{"/api/v1/assignments/" + assignmentID.String() + "/arrive", "driver", "", http.StatusOK},
-		{"/api/v1/assignments/" + assignmentID.String() + "/complete", "driver", `{"recipientName":"Recipient","comment":"received"}`, http.StatusOK},
+		{http.MethodPost, "/api/v1/orders", "client", `{"destinationAddress":"Destination"}`, http.StatusCreated},
+		{http.MethodPatch, "/api/v1/orders/" + orderID.String(), "client", `{"weightKg":200}`, http.StatusOK},
+		{http.MethodPost, "/api/v1/orders/" + orderID.String() + "/submit", "client", "", http.StatusOK},
+		{http.MethodPost, "/api/v1/orders/" + orderID.String() + "/assignments", "manager", `{"driverId":"` + assignment.DriverID.String() + `","vehicleId":"` + assignment.VehicleID.String() + `","plannedFrom":"` + from + `","plannedTo":"` + to + `"}`, http.StatusCreated},
+		{http.MethodGet, "/api/v1/assignments", "driver", "", http.StatusOK},
+		{http.MethodGet, "/api/v1/orders/" + orderID.String() + "/assignments", "manager", "", http.StatusOK},
+		{http.MethodPost, "/api/v1/assignments/" + assignmentID.String() + "/accept", "driver", "", http.StatusOK},
+		{http.MethodPost, "/api/v1/assignments/" + assignmentID.String() + "/start", "driver", "", http.StatusOK},
+		{http.MethodPost, "/api/v1/assignments/" + assignmentID.String() + "/arrive", "driver", "", http.StatusOK},
+		{http.MethodPost, "/api/v1/assignments/" + assignmentID.String() + "/complete", "driver", `{"recipientName":"Recipient","comment":"received"}`, http.StatusOK},
 	}
 	for _, step := range steps {
-		req := httptest.NewRequest(http.MethodPost, step.path, bytes.NewBufferString(step.body))
+		req := httptest.NewRequest(step.method, step.path, bytes.NewBufferString(step.body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Test-Role", step.role)
 		response := httptest.NewRecorder()
 		httpHandler.ServeHTTP(response, req)
 		if response.Code != step.want {
-			t.Fatalf("POST %s: got %d want %d: %s", step.path, response.Code, step.want, response.Body.String())
+			t.Fatalf("%s %s: got %d want %d: %s", step.method, step.path, response.Code, step.want, response.Body.String())
 		}
 	}
 	if order.Status != models.OrderCompleted || assignment.Status != models.AssignmentCompleted {

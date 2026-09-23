@@ -29,6 +29,34 @@ func (s *Server) CreateAssignment(w http.ResponseWriter, r *http.Request, id ope
 	s.JSON(w, r, http.StatusCreated, assignment, "assignment")
 }
 
+func (s *Server) ListAssignments(w http.ResponseWriter, r *http.Request, params api.ListAssignmentsParams) {
+	claims, ok := r.Context().Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	items, err := s.OrderSerice.ListAssignments(r.Context(), claims.ID, claims.Role, params)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, items, "assignments")
+}
+
+func (s *Server) ListOrderAssignments(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	claims, ok := r.Context().Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
+		return
+	}
+	items, err := s.OrderSerice.ListOrderAssignments(r.Context(), id, claims.ID, claims.Role)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, items, "assignments")
+}
+
 func (s *Server) AcceptAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	claims, ok := r.Context().Value(UserKey).(*Claims)
 	if !ok {
