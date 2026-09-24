@@ -9,9 +9,9 @@ import (
 type Vehicle struct {
 	ID          uuid.UUID `db:"id"`
 	PlateNumber string    `db:"plate_number"`
-	Brand       string    `db:"brand"`
-	Model       string    `db:"model"`
-	Year        int       `db:"year"`
+	Brand       *string   `db:"brand"`
+	Model       *string   `db:"model"`
+	Year        *int      `db:"year"`
 	CapacityKg  float64   `db:"capacity_kg"`
 	CapacityM3  float64   `db:"capacity_m3"`
 	Status      string    `db:"status"` // available, in_transit, maintenance

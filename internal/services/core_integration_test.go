@@ -51,7 +51,8 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 			t.Fatalf("create user: %v", err)
 		}
 	}
-	warehouse := models.Warehouse{ID: uuid.New(), Name: "Smoke warehouse", Slug: "smoke-warehouse", Address: "Origin", City: "Test", Latitude: 60, Longitude: 30, CreatedAt: time.Now()}
+	lat, originLon, otherLon := 60.0, 30.0, 31.0
+	warehouse := models.Warehouse{ID: uuid.New(), Name: "Smoke warehouse", Slug: "smoke-warehouse", Address: "Origin", City: "Test", Latitude: &lat, Longitude: &originLon, CreatedAt: time.Now()}
 	if err := storage.Create(ctx, "warehouses", warehouse, pool); err != nil {
 		t.Fatalf("create warehouse: %v", err)
 	}
@@ -59,7 +60,8 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 		t.Fatalf("create manager: %v", err)
 	}
 
-	vehicle := models.Vehicle{ID: uuid.New(), PlateNumber: "SMOKE-001", Brand: "Test", Model: "Truck", Year: 2026, CapacityKg: 5000, CapacityM3: 30, Status: "available", Slug: "smoke-001"}
+	brand, vehicleModel, year := "Test", "Truck", 2026
+	vehicle := models.Vehicle{ID: uuid.New(), PlateNumber: "SMOKE-001", Brand: &brand, Model: &vehicleModel, Year: &year, CapacityKg: 5000, CapacityM3: 30, Status: "available", Slug: "smoke-001"}
 	if err := storage.Create(ctx, "vehicles", vehicle, pool); err != nil {
 		t.Fatalf("create vehicle: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	plannedFrom := time.Now().Add(2 * time.Hour).Truncate(time.Second)
 	plannedTo := plannedFrom.Add(2 * time.Hour)
 	draft := createDraftOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom, plannedTo)
-	otherWarehouse := models.Warehouse{ID: uuid.New(), Name: "Other warehouse", Slug: "other-warehouse", Address: "Other", City: "Test", Latitude: 60, Longitude: 31, CreatedAt: time.Now()}
+	otherWarehouse := models.Warehouse{ID: uuid.New(), Name: "Other warehouse", Slug: "other-warehouse", Address: "Other", City: "Test", Latitude: &lat, Longitude: &otherLon, CreatedAt: time.Now()}
 	if err := storage.Create(ctx, "warehouses", otherWarehouse, pool); err != nil {
 		t.Fatalf("create other warehouse: %v", err)
 	}
@@ -385,6 +387,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 
 func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID, warehouseID uuid.UUID, from, to time.Time) models.Order {
 	t.Helper()
+	price := 1000.0
 	order := models.Order{
 		ID:                 uuid.New(),
 		CreatedByID:        &clientID,
@@ -395,7 +398,7 @@ func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 		WeightKg:           100,
 		VolumeM3:           2,
 		Status:             models.OrderReadyForDispatch,
-		TotalPrice:         1000,
+		TotalPrice:         &price,
 		PickupFrom:         &from,
 		PickupTo:           &to,
 		CreatedAt:          time.Now(),
@@ -408,6 +411,7 @@ func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 
 func createDraftOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID, warehouseID uuid.UUID, from, to time.Time) models.Order {
 	t.Helper()
+	distance, duration := 10.0, 900
 	order := createReadyOrder(t, ctx, pool, clientID, warehouseID, from, to)
 	order.Status = models.OrderDraft
 	if err := storage.Update(ctx, "orders", order, pool, func(ub *sqlbuilder.UpdateBuilder) {
@@ -419,8 +423,8 @@ func createDraftOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 		ID:          uuid.New(),
 		OrderID:     order.ID,
 		Coordinates: json.RawMessage(`[[30.0,60.0],[30.1,60.1]]`),
-		DistanceKm:  10,
-		DurationSec: 900,
+		DistanceKm:  &distance,
+		DurationSec: &duration,
 		Status:      "pending",
 	}
 	if err := storage.Create(ctx, "routes", route, pool); err != nil {

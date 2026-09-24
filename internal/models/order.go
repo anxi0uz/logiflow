@@ -18,7 +18,7 @@ type Order struct {
 	WeightKg           float64    `db:"weight_kg" json:"weightKg"`
 	VolumeM3           float64    `db:"volume_m3" json:"volumeM3"`
 	Status             string     `db:"status" json:"status"`
-	TotalPrice         float64    `db:"total_price" json:"totalPrice"`
+	TotalPrice         *float64   `db:"total_price" json:"totalPrice"`
 	PickupFrom         *time.Time `db:"pickup_from" json:"pickupFrom,omitempty"`
 	PickupTo           *time.Time `db:"pickup_to" json:"pickupTo,omitempty"`
 	CreatedAt          time.Time  `db:"created_at" json:"createdAt"`
