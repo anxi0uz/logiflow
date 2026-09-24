@@ -59,8 +59,9 @@ func (s *Server) CreateWarehouse(w http.ResponseWriter, r *http.Request) {
 		Address:   req.Address,
 		City:      req.City,
 		Slug:      slug.Make(req.Name),
-		Latitude:  lat,
-		Longitude: lon,
+		Latitude:  &lat,
+		Longitude: &lon,
+		Status:    "active",
 		CreatedAt: now,
 	}
 	if err := storage.Create(ctx, "warehouses", warehouse, s.DB); err != nil {
@@ -118,12 +119,26 @@ func (s *Server) UpdateWarehouse(w http.ResponseWriter, r *http.Request, slug st
 		return
 	}
 
-	warehouse.Address = *req.Address
-	warehouse.City = *req.City
-	warehouse.Latitude = float64(*req.Latitude)
-	warehouse.Longitude = float64(*req.Longitude)
-	warehouse.Status = string(*req.Status)
-	warehouse.Name = *req.Name
+	if req.Address != nil {
+		warehouse.Address = *req.Address
+	}
+	if req.City != nil {
+		warehouse.City = *req.City
+	}
+	if req.Latitude != nil {
+		latitude := float64(*req.Latitude)
+		warehouse.Latitude = &latitude
+	}
+	if req.Longitude != nil {
+		longitude := float64(*req.Longitude)
+		warehouse.Longitude = &longitude
+	}
+	if req.Status != nil {
+		warehouse.Status = string(*req.Status)
+	}
+	if req.Name != nil {
+		warehouse.Name = *req.Name
+	}
 	if err := storage.Update(ctx, "warehouses", warehouse, s.DB, func(sb *sqlbuilder.UpdateBuilder) {
 		sb.Where(sb.Equal("slug", slug))
 	}); err != nil {

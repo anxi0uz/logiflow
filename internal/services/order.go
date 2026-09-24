@@ -91,7 +91,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		if err != nil {
 			return nil, err
 		}
-		origin.Coordinates = &routing.Coordinates{Latitude: warehouse.Latitude, Longitude: warehouse.Longitude}
+		if warehouse.Latitude == nil || warehouse.Longitude == nil {
+			return nil, ErrInvalidOrderInput
+		}
+		origin.Coordinates = &routing.Coordinates{Latitude: *warehouse.Latitude, Longitude: *warehouse.Longitude}
 	}
 	destination := routing.Endpoint{Address: req.DestinationAddress}
 	if req.DestinationWarehouseId != nil {
@@ -101,7 +104,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		if err != nil {
 			return nil, err
 		}
-		destination.Coordinates = &routing.Coordinates{Latitude: warehouse.Latitude, Longitude: warehouse.Longitude}
+		if warehouse.Latitude == nil || warehouse.Longitude == nil {
+			return nil, ErrInvalidOrderInput
+		}
+		destination.Coordinates = &routing.Coordinates{Latitude: *warehouse.Latitude, Longitude: *warehouse.Longitude}
 	}
 	estimate, err := s.routePlanner.Plan(ctx, origin, destination)
 	if err != nil {
@@ -124,7 +130,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		OriginWarehouseID:  req.OriginWarehouseId,
 		DestinationAddress: req.DestinationAddress,
 		Status:             models.OrderDraft,
-		TotalPrice:         price,
+		TotalPrice:         &price,
 		CreatedAt:          time.Now(),
 		PickupFrom:         req.PickupFrom,
 		PickupTo:           req.PickupTo,
@@ -150,8 +156,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		ID:          uuid.New(),
 		OrderID:     orderID,
 		Coordinates: coordsJSON,
-		DurationSec: estimate.DurationSec,
-		DistanceKm:  estimate.DistanceKm,
+		DurationSec: &estimate.DurationSec,
+		DistanceKm:  &estimate.DistanceKm,
 		Status:      "pending",
 	}
 
@@ -336,7 +342,11 @@ func (s *OrderService) UpdateDraftOrder(ctx context.Context, id uuid.UUID, userI
 	if err != nil {
 		return nil, err
 	}
-	order.TotalPrice = s.orderPrice(route.DistanceKm, order.WeightKg, order.VolumeM3)
+	if route.DistanceKm == nil || route.DurationSec == nil || len(route.Coordinates) == 0 {
+		return nil, ErrInvalidOrderInput
+	}
+	price := s.orderPrice(*route.DistanceKm, order.WeightKg, order.VolumeM3)
+	order.TotalPrice = &price
 	if err := storage.Update(ctx, "orders", *order, tx, func(ub *sqlbuilder.UpdateBuilder) { ub.Where(ub.EQ("id", id)) }); err != nil {
 		return nil, err
 	}

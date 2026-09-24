@@ -47,10 +47,14 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 	if order.DestinationAddress == "" || order.WeightKg < 0 || order.VolumeM3 < 0 || order.PickupFrom == nil || order.PickupTo == nil || !order.PickupFrom.Before(*order.PickupTo) {
 		return nil, ErrInvalidTimeWindow
 	}
-	if _, err := storage.GetOne[models.Route](ctx, tx, "routes", func(sb *sqlbuilder.SelectBuilder) {
+	route, err := storage.GetOne[models.Route](ctx, tx, "routes", func(sb *sqlbuilder.SelectBuilder) {
 		sb.Where(sb.EQ("order_id", id))
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("order route is not ready: %w", err)
+	}
+	if order.TotalPrice == nil || route.DistanceKm == nil || route.DurationSec == nil || len(route.Coordinates) == 0 {
+		return nil, ErrInvalidOrderInput
 	}
 
 	now := time.Now()

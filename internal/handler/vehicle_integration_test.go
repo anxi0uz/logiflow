@@ -46,6 +46,20 @@ func TestAdminCanManageGlobalFleet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("created vehicle not found: %v", err)
 	}
+	if vehicle.Brand != nil || vehicle.Model != nil || vehicle.Year != nil || vehicle.CapacityKg != 1000 || vehicle.CapacityM3 != 0 {
+		t.Fatalf("optional vehicle fields were not preserved: %+v", vehicle)
+	}
+	sparseID := uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO vehicles (id, plate_number, slug) VALUES ($1, $2, $3)`, sparseID, "SP-"+sparseID.String()[:8], "sparse-"+sparseID.String()); err != nil {
+		t.Fatalf("insert sparse vehicle: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM vehicles WHERE id = $1`, sparseID)
+	})
+	sparse, err := storage.GetOne[models.Vehicle](ctx, pool, "vehicles", func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("id", sparseID)) })
+	if err != nil || sparse.Brand != nil || sparse.Model != nil || sparse.Year != nil || sparse.CapacityKg != 0 || sparse.CapacityM3 != 0 || sparse.Status != "maintenance" {
+		t.Fatalf("scan sparse vehicle: %+v err=%v", sparse, err)
+	}
 	t.Cleanup(func() {
 		_ = storage.Delete[models.Vehicle](ctx, "vehicles", pool, func(db *sqlbuilder.DeleteBuilder) { db.Where(db.EQ("id", vehicle.ID)) })
 	})

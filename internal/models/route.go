@@ -18,8 +18,8 @@ type Route struct {
 	CurrentIndex int             `db:"current_index"`
 	StartedAt    *time.Time      `db:"started_at"`
 	FinishedAt   *time.Time      `db:"finished_at"`
-	DistanceKm   float64         `db:"distance_km"`
-	DurationSec  int             `db:"duration_sec"`
+	DistanceKm   *float64        `db:"distance_km"`
+	DurationSec  *int            `db:"duration_sec"`
 	Status       string          `db:"status"` // pending, active, finished
 }
 

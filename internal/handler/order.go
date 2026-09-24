@@ -209,6 +209,10 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 	}
 
 	for row, o := range orders {
+		var price any = ""
+		if o.TotalPrice != nil {
+			price = *o.TotalPrice
+		}
 		values := []any{
 			o.ID.String(),
 			o.Status,
@@ -216,7 +220,7 @@ func (s *Server) GetOrdersReport(w http.ResponseWriter, r *http.Request, params 
 			o.DestinationAddress,
 			o.WeightKg,
 			o.VolumeM3,
-			o.TotalPrice,
+			price,
 			o.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 		for col, v := range values {

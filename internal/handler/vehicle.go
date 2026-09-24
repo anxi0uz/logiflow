@@ -170,13 +170,13 @@ func (s *Server) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Brand != nil {
-		vehicle.Brand = *req.Brand
+		vehicle.Brand = req.Brand
 	}
 	if req.Model != nil {
-		vehicle.Model = *req.Model
+		vehicle.Model = req.Model
 	}
 	if req.Year != nil {
-		vehicle.Year = *req.Year
+		vehicle.Year = req.Year
 	}
 	if req.CapacityKg != nil {
 		vehicle.CapacityKg = float64(*req.CapacityKg)
@@ -251,13 +251,13 @@ func (s *Server) UpdateVehicle(w http.ResponseWriter, r *http.Request, slug stri
 		vehicle.Status = string(*req.Status)
 	}
 	if req.Brand != nil {
-		vehicle.Brand = *req.Brand
+		vehicle.Brand = req.Brand
 	}
 	if req.Model != nil {
-		vehicle.Model = *req.Model
+		vehicle.Model = req.Model
 	}
 	if req.Year != nil {
-		vehicle.Year = *req.Year
+		vehicle.Year = req.Year
 	}
 	if req.CapacityKg != nil {
 		vehicle.CapacityKg = float64(*req.CapacityKg)
