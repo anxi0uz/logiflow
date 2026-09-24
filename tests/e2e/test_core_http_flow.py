@@ -8,6 +8,7 @@ Run with:
 """
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from threading import Barrier
@@ -235,6 +236,7 @@ def test_order_flow_and_concurrent_reservation():
             tokens["driver2"],
             expected=409,
         )
+
         assert (
             call(
                 "POST", f"/api/v1/assignments/{second['id']}/start", tokens["driver2"]
@@ -277,6 +279,41 @@ def test_order_flow_and_concurrent_reservation():
             tokens["driver2"],
             expected=409,
         )
+
+        if os.getenv("LOGIFLOW_E2E_DOCUMENTS") == "1":
+            document = None
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                inbox = call("GET", "/api/v1/documents", tokens["client"])["data"]["success"] or []
+                document = next((item for item in inbox if item["order_id"] == order_id), None)
+                if document:
+                    break
+                time.sleep(0.25)
+            assert document, "delivery confirmation was not generated"
+            document_id = document["id"]
+            assert document["type"] == "delivery_confirmation"
+            owner_pdf = http.get(
+                f"/api/v1/documents/{document_id}/download",
+                headers={"Authorization": f"Bearer {tokens['client']}"},
+            )
+            assert owner_pdf.status_code == 200
+            assert owner_pdf.headers["content-type"] == "application/pdf"
+            assert owner_pdf.content.startswith(b"%PDF-")
+            stranger_pdf = http.get(
+                f"/api/v1/documents/{document_id}/download",
+                headers={"Authorization": f"Bearer {tokens['driver1']}"},
+            )
+            assert stranger_pdf.status_code == 404
+
+            linked_notice = False
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                notices = call("GET", "/notifications", tokens["client"])["data"]["success"] or []
+                linked_notice = any(item["DocumentID"] == document_id for item in notices)
+                if linked_notice:
+                    break
+                time.sleep(0.25)
+            assert linked_notice, "document notification was not delivered"
 
         # Cancelling an open offer releases its reservation.
         cancel_id, start, end = create_and_submit(5)

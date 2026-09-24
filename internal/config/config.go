@@ -52,6 +52,14 @@ type Config struct {
 		AccessTokenDur  time.Duration
 	} `koanf:"redis"`
 
+	NATS struct {
+		Addr string `koanf:"addr"`
+	} `koanf:"nats"`
+
+	Documents struct {
+		Address string `koanf:"address"`
+	} `koanf:"documents"`
+
 	JwtOpt struct {
 		Key      string `koanf:"key"`
 		Issuer   string `koanf:"issuer"`
@@ -157,6 +165,12 @@ func (c *Config) setDefaults() {
 	}
 	if c.Redis.Addr == "" {
 		c.Redis.Addr = "localhost:6379"
+	}
+	if c.NATS.Addr == "" {
+		c.NATS.Addr = "nats://localhost:4222"
+	}
+	if c.Documents.Address == "" {
+		c.Documents.Address = "localhost:50051"
 	}
 	if c.Pricing.BaseFee == 0 {
 		c.Pricing.BaseFee = 500.0

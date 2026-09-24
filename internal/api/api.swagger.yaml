@@ -46,6 +46,17 @@ components:
         requestID:
           type: string
 
+    DocumentSummary:
+      type: object
+      required: [id, order_id, type, title, created_at, size_bytes]
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        type: { type: string, enum: [delivery_confirmation] }
+        title: { type: string }
+        created_at: { type: string, format: date-time }
+        size_bytes: { type: integer, format: int64 }
+
     # ─── Auth ─────────────────────────────────────────────────────────────────
 
     RegisterRequest:
@@ -1548,6 +1559,57 @@ paths:
             schema: { $ref: "#/components/schemas/DeliveryComplete" }
       responses:
         "200": { description: Доставка завершена }
+
+  /api/v1/documents:
+    get:
+      operationId: listInboxDocuments
+      summary: Документы в личном ящике
+      description: Возвращает только документы авторизованного пользователя.
+      tags: [Documents]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+      responses:
+        "200":
+          description: Список документов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: array
+                        items: { $ref: "#/components/schemas/DocumentSummary" }
+        "401": { description: Требуется авторизация }
+        "503": { description: Сервис документов недоступен }
+
+  /api/v1/documents/{id}/download:
+    get:
+      operationId: downloadInboxDocument
+      summary: Скачать документ из личного ящика
+      description: Для чужого или несуществующего документа возвращает 404.
+      tags: [Documents]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF-файл
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { description: Требуется авторизация }
+        "404": { description: Документ не найден или недоступен }
+        "503": { description: Сервис документов недоступен }
 
   /orders/{id}/status:
     parameters:

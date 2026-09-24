@@ -44,6 +44,47 @@ services:
       timeout: 5s
       retries: 5
 
+  documents-postgres:
+    networks:
+      - default
+    image: docker.io/library/postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: documents
+      POSTGRES_PASSWORD: ${LOGIFLOW_DOCUMENTS_DATABASE_PASSWORD:-documents-local}
+      POSTGRES_DB: documents
+    volumes:
+      - documents_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U documents -d documents"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nats:
+    networks:
+      - default
+    image: docker.io/library/nats:2.11-alpine
+    restart: always
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - nats_data:/data
+
+  documents:
+    networks:
+      - default
+    build:
+      context: ./services/documents
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+psycopg://documents:${LOGIFLOW_DOCUMENTS_DATABASE_PASSWORD:-documents-local}@documents-postgres:5432/documents
+      NATS_URL: nats://nats:4222
+    depends_on:
+      documents-postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
   prometheus:
     networks:
       - default
@@ -90,8 +131,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nats:
+        condition: service_started
+      documents:
+        condition: service_started
 
 volumes:
   postgres_data:
   redis_data:
   grafana_data:
+  documents_postgres_data:
+  nats_data:

@@ -12,6 +12,7 @@ import (
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
 	"github.com/anxi0uz/logiflow/internal/database"
+	"github.com/anxi0uz/logiflow/internal/events"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/google/uuid"
@@ -35,7 +36,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	}
 	defer pool.Close()
 
-	if _, err := pool.Exec(ctx, `TRUNCATE order_status_history, assignments, routes, notifications, orders, driver_shifts, driver_documents, vehicle_documents, drivers, managers, warehouses, vehicles, users CASCADE`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE integration_outbox, integration_inbox, order_status_history, assignments, routes, notifications, orders, driver_shifts, driver_documents, vehicle_documents, drivers, managers, warehouses, vehicles, users CASCADE`); err != nil {
 		t.Fatalf("truncate test data: %v", err)
 	}
 
@@ -237,6 +238,17 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	}
 	if _, err := service.CompleteAssignment(ctx, assignment.ID, driverUserID, "driver", api.DeliveryComplete{}); !errors.Is(err, ErrInvalidOrderTransition) {
 		t.Fatalf("double complete: %v", err)
+	}
+	var eventPayload []byte
+	if err := pool.QueryRow(ctx, `SELECT payload FROM integration_outbox WHERE subject = 'delivery.completed.v1' AND payload->>'order_id' = $1`, order.ID.String()).Scan(&eventPayload); err != nil {
+		t.Fatalf("delivery event missing: %v", err)
+	}
+	var delivered events.DeliveryCompleted
+	if err := json.Unmarshal(eventPayload, &delivered); err != nil {
+		t.Fatalf("decode delivery event: %v", err)
+	}
+	if delivered.UserID != clientID || delivered.RecipientName == nil || *delivered.RecipientName != recipient || delivered.VehicleID != vehicle.ID {
+		t.Fatalf("delivery event snapshot: %+v", delivered)
 	}
 	clientNotices, err := storage.GetAll[models.Notification](ctx, "notifications", pool, func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", clientID)) })
 	if err != nil || len(clientNotices) != 4 {

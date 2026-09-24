@@ -19,6 +19,12 @@ db = 0
 refreshTokenTTL = "168h"
 accessTokenTTL = "24h"
 
+[nats]
+addr = "nats://nats:4222"
+
+[documents]
+address = "documents:50051"
+
 [jwt]
 issuer = "logiflow-server"
 audience = "logiflow-client"

@@ -31,6 +31,21 @@ func (e AssignmentCreateSource) Valid() bool {
 	}
 }
 
+// Defines values for DocumentSummaryType.
+const (
+	DeliveryConfirmation DocumentSummaryType = "delivery_confirmation"
+)
+
+// Valid indicates whether the value is a known member of the DocumentSummaryType enum.
+func (e DocumentSummaryType) Valid() bool {
+	switch e {
+	case DeliveryConfirmation:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DriverStatusUpdateStatus.
 const (
 	DriverStatusUpdateStatusAvailable DriverStatusUpdateStatus = "available"
@@ -303,6 +318,19 @@ type DeliveryComplete struct {
 	RecipientName *string `json:"recipientName,omitempty"`
 }
 
+// DocumentSummary defines model for DocumentSummary.
+type DocumentSummary struct {
+	CreatedAt time.Time           `json:"created_at"`
+	Id        openapi_types.UUID  `json:"id"`
+	OrderId   openapi_types.UUID  `json:"order_id"`
+	SizeBytes int64               `json:"size_bytes"`
+	Title     string              `json:"title"`
+	Type      DocumentSummaryType `json:"type"`
+}
+
+// DocumentSummaryType defines model for DocumentSummary.Type.
+type DocumentSummaryType string
+
 // DriverCreate defines model for DriverCreate.
 type DriverCreate struct {
 	Email         openapi_types.Email `json:"email"`
@@ -474,6 +502,12 @@ type ListAssignmentsParams struct {
 // ListAssignmentsParamsStatus defines parameters for ListAssignments.
 type ListAssignmentsParamsStatus string
 
+// ListInboxDocumentsParams defines parameters for ListInboxDocuments.
+type ListInboxDocumentsParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListOrdersParams defines parameters for ListOrders.
 type ListOrdersParams struct {
 	Status   *ListOrdersParamsStatus `form:"status,omitempty" json:"status,omitempty"`
@@ -588,6 +622,12 @@ type ServerInterface interface {
 	// Начать перевозку
 	// (POST /api/v1/assignments/{id}/start)
 	StartAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Документы в личном ящике
+	// (GET /api/v1/documents)
+	ListInboxDocuments(w http.ResponseWriter, r *http.Request, params ListInboxDocumentsParams)
+	// Скачать документ из личного ящика
+	// (GET /api/v1/documents/{id}/download)
+	DownloadInboxDocument(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Список заявок
 	// (GET /api/v1/orders)
 	ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams)
@@ -765,6 +805,18 @@ func (_ Unimplemented) RejectAssignment(w http.ResponseWriter, r *http.Request, 
 // Начать перевозку
 // (POST /api/v1/assignments/{id}/start)
 func (_ Unimplemented) StartAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Документы в личном ящике
+// (GET /api/v1/documents)
+func (_ Unimplemented) ListInboxDocuments(w http.ResponseWriter, r *http.Request, params ListInboxDocumentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Скачать документ из личного ящика
+// (GET /api/v1/documents/{id}/download)
+func (_ Unimplemented) DownloadInboxDocument(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1201,6 +1253,66 @@ func (siw *ServerInterfaceWrapper) StartAssignment(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StartAssignment(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListInboxDocuments operation middleware
+func (siw *ServerInterfaceWrapper) ListInboxDocuments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInboxDocumentsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListInboxDocuments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadInboxDocument operation middleware
+func (siw *ServerInterfaceWrapper) DownloadInboxDocument(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadInboxDocument(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2349,6 +2461,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/assignments/{id}/start", wrapper.StartAssignment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/documents", wrapper.ListInboxDocuments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/documents/{id}/download", wrapper.DownloadInboxDocument)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/orders", wrapper.ListOrders)
