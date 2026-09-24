@@ -11,6 +11,7 @@ import (
 
 	"github.com/anxi0uz/logiflow/internal/config"
 	"github.com/anxi0uz/logiflow/internal/database"
+	"github.com/anxi0uz/logiflow/internal/events"
 	"github.com/anxi0uz/logiflow/internal/handler"
 	"github.com/golang-cz/devslog"
 )
@@ -66,6 +67,7 @@ func main() {
 		slog.ErrorContext(ctx, "Ошибка миграций", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	go events.Run(ctx, connectionPool, cfg.NATS.Addr)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)

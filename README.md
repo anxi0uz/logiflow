@@ -13,6 +13,8 @@
 **Backend:**
 - **Go 1.25** — Chi v5, oapi-codegen, pgx/v5, go-redis, errgroup
 - **PostgreSQL** — миграции через Goose
+- **Python 3.13 + uv** — отдельный сервис генерации PDF в личный ящик; своя PostgreSQL и Alembic
+- **NATS JetStream + gRPC** — события завершения доставки/готовности документа и приватный запрос ящика из Core
 - **Redis** — хранение JWT access/refresh токенов
 - **Nominatim** — геокодинг адресов (OpenStreetMap, без ключа)
 - **OSRM** — построение маршрутов и расчёт дистанции
@@ -65,6 +67,7 @@ LOGIFLOW_DATABASE_PASSWORD=yourpassword
 LOGIFLOW_DATABASE_NAME=logiflow
 LOGIFLOW_REDIS_PASSWORD=yourredispassword
 LOGIFLOW_JWT_KEY=your-secret-jwt-key-min-32-chars
+LOGIFLOW_DOCUMENTS_DATABASE_PASSWORD=your-documents-db-password
 ```
 
 > `LOGIFLOW_JWT_KEY` — любая случайная строка, минимум 32 символа.
@@ -345,6 +348,8 @@ Datasource Grafana: `configs/datasources/`
 ```bash
 go test ./...
 ```
+
+Для сервиса документов: `cd services/documents && uv run --group dev pytest -q`. Если полный стенд с Document Service поднят, HTTP E2E дополнительно проверяет появление PDF, скачивание только владельцем и связанное уведомление при `LOGIFLOW_E2E_DOCUMENTS=1`. Подробности — в [services/documents/README.md](services/documents/README.md).
 
 Проверка Core на настоящей PostgreSQL, включая полный lifecycle и конкурентное назначение одного ресурса:
 

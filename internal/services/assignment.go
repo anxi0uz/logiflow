@@ -2,12 +2,14 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"time"
 
 	"github.com/anxi0uz/logiflow/internal/api"
+	"github.com/anxi0uz/logiflow/internal/events"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/google/uuid"
@@ -563,7 +565,7 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 		return nil, err
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	order, assignment, driver, _, err := s.lockAssignmentContext(ctx, tx, id)
+	order, assignment, driver, vehicle, err := s.lockAssignmentContext(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -601,6 +603,31 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 	}
 	if order.CreatedByID != nil {
 		if err := s.notify(ctx, tx, *order.CreatedByID, "Доставка завершена", fmt.Sprintf("Доставка заказа %s подтверждена", order.ID)); err != nil {
+			return nil, err
+		}
+		origin := order.OriginAddress
+		if origin == "" && order.OriginWarehouseID != nil {
+			warehouse, err := storage.GetOne[models.Warehouse](ctx, tx, "warehouses", func(sb *sqlbuilder.SelectBuilder) {
+				sb.Where(sb.EQ("id", *order.OriginWarehouseID))
+			})
+			if err == nil {
+				origin = warehouse.Address
+			}
+		}
+		eventID := uuid.New()
+		payload, err := json.Marshal(events.DeliveryCompleted{
+			EventID: eventID, OrderID: order.ID, UserID: *order.CreatedByID,
+			OriginAddress: origin, DestinationAddress: order.DestinationAddress,
+			CargoDescription: order.CargoDescription, WeightKg: order.WeightKg,
+			VolumeM3: order.VolumeM3, TotalPrice: order.TotalPrice, DeliveredAt: now,
+			RecipientName: assignment.RecipientName, DriverID: driver.ID, VehicleID: vehicle.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := storage.Create(ctx, "integration_outbox", models.IntegrationEvent{
+			ID: eventID, Subject: "delivery.completed.v1", Payload: payload, CreatedAt: now,
+		}, tx); err != nil {
 			return nil, err
 		}
 	}

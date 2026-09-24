@@ -1,0 +1,41 @@
+[project]
+name = "logiflow-documents"
+version = "0.1.0"
+description = "Private document generation and inbox service for Logiflow"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.18.5",
+    "grpcio>=1.84.0",
+    "nats-py>=2.12.0",
+    "psycopg[binary]>=3.3.4",
+    "protobuf>=7.36.2",
+    "pydantic-settings>=2.14.2",
+    "reportlab>=4.4.0",
+    "sqlalchemy>=2.0.51",
+    "structlog>=26.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "grpcio-tools>=1.78.0",
+    "pytest>=9.1.1",
+    "ruff>=0.14.0",
+]
+
+[project.scripts]
+logiflow-documents = "document_service.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/document_service", "src/logiflow"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+exclude = ["src/logiflow/documents/v1/*_pb2.py", "src/logiflow/documents/v1/*_pb2_grpc.py"]

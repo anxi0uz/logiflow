@@ -12,6 +12,7 @@ import (
 
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
+	"github.com/anxi0uz/logiflow/internal/documentpb"
 	"github.com/anxi0uz/logiflow/internal/models"
 	"github.com/anxi0uz/logiflow/internal/services"
 	storage "github.com/anxi0uz/logiflow/pkg"
@@ -25,6 +26,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/xid"
 	slogchi "github.com/samber/slog-chi"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type ctxKey string
@@ -54,17 +57,19 @@ type responseOptions struct {
 }
 
 type Server struct {
-	DB          *pgxpool.Pool
-	Config      *config.Config
-	ctx         context.Context
-	Redis       *redis.Client
-	JwtKey      []byte
-	OrderSerice services.OrderServicer
-	Hub         *Hub
+	DB             *pgxpool.Pool
+	Config         *config.Config
+	ctx            context.Context
+	Redis          *redis.Client
+	JwtKey         []byte
+	OrderSerice    services.OrderServicer
+	Hub            *Hub
+	DocumentClient documentpb.DocumentInboxClient
+	documentConn   *grpc.ClientConn
 }
 
 func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
-	return &Server{
+	s := &Server{
 		DB:          db,
 		Redis:       redis,
 		ctx:         ctx,
@@ -73,9 +78,22 @@ func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, cfg *
 		OrderSerice: services.NewOrderService(db, *cfg),
 		Hub:         NewHub(),
 	}
+	if cfg.Documents.Address != "" {
+		conn, err := grpc.NewClient(cfg.Documents.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			slog.ErrorContext(ctx, "documents client unavailable", slog.String("error", err.Error()))
+		} else {
+			s.documentConn = conn
+			s.DocumentClient = documentpb.NewDocumentInboxClient(conn)
+		}
+	}
+	return s
 }
 
 func (s *Server) Run() error {
+	if s.documentConn != nil {
+		defer s.documentConn.Close()
+	}
 	r := chi.NewMux()
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},

@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package logiflow.documents.v1;
+
+option go_package = "github.com/anxi0uz/logiflow/internal/documentpb;documentpb";
+
+service DocumentInbox {
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse);
+  rpc DownloadDocument(DownloadDocumentRequest) returns (stream DocumentChunk);
+}
+
+message ListDocumentsRequest {
+  string user_id = 1;
+  uint32 limit = 2;
+  uint32 offset = 3;
+}
+
+message Document {
+  string id = 1;
+  string order_id = 2;
+  string type = 3;
+  string title = 4;
+  string created_at = 5;
+  uint64 size_bytes = 6;
+}
+
+message ListDocumentsResponse {
+  repeated Document documents = 1;
+}
+
+message DownloadDocumentRequest {
+  string user_id = 1;
+  string document_id = 2;
+}
+
+message DocumentChunk {
+  bytes data = 1;
+}
