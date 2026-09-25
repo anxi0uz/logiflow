@@ -38,6 +38,7 @@ key = "file-jwt-key"
 	t.Setenv("LOGIFLOW_DATABASE_PASSWORD", "env-password")
 	t.Setenv("LOGIFLOW_DATABASE_NAME", "env-database")
 	t.Setenv("LOGIFLOW_JWT_KEY", "env-jwt-key")
+	t.Setenv("LOGIFLOW_ROUTING_BASEURL", "http://osrm:8080")
 
 	cfg, err := NewConfig(context.Background(), configPath)
 	if err != nil {
@@ -48,5 +49,8 @@ key = "file-jwt-key"
 	}
 	if cfg.JwtOpt.Key != "env-jwt-key" {
 		t.Fatalf("environment did not override jwt key: %q", cfg.JwtOpt.Key)
+	}
+	if cfg.Routing.BaseURL != "http://osrm:8080" {
+		t.Fatalf("environment did not configure routing URL: %q", cfg.Routing.BaseURL)
 	}
 }

@@ -20,12 +20,56 @@ jobs:
         with:
           version: v2.11.4
 
-  test:
+  go-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Test
-        run: go test ./tests/...
+      - name: Test all Go packages
+        run: go test ./...
+
+  python-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/documents
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v10
+      - name: Install document service dependencies
+        run: uv sync --locked --group dev
+      - name: Test document service
+        run: uv run --no-sync pytest -q
+      - name: Ruff lint
+        run: uv run --no-sync ruff check .
+      - name: Ruff format
+        run: uv run --no-sync ruff format --check .
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@v10
+      - name: Start isolated stack
+        run: docker compose -p logiflow-e2e -f .github/compose.e2e.yml up --build -d --wait --wait-timeout 180
+      - name: Run HTTP and document E2E
+        env:
+          LOGIFLOW_E2E_BASE_URL: http://127.0.0.1:3001
+          LOGIFLOW_E2E_DATABASE_URL: postgres://logiflow:ci-test-password@127.0.0.1:55432/logiflow_test?sslmode=disable
+          LOGIFLOW_E2E_DOCUMENTS: '1'
+        run: uv run --with pytest --with httpx --with 'psycopg[binary]' pytest -q tests/e2e/test_core_http_flow.py
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -p logiflow-e2e -f .github/compose.e2e.yml logs --no-color
+      - name: Stop isolated stack
+        if: always()
+        run: docker compose -p logiflow-e2e -f .github/compose.e2e.yml down -v --remove-orphans

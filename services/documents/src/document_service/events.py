@@ -1,9 +1,11 @@
 import asyncio
+import base64
 import json
 from datetime import UTC, datetime
 
 import structlog
 from nats.js.client import JetStreamContext
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -12,6 +14,40 @@ from document_service.modules.documents.schemas import DeliveryCompleted
 from document_service.modules.documents.service import accept_delivery
 
 log = structlog.get_logger(component="documents.events")
+
+
+async def process_delivery_message(message, js, sessions, font_path):
+    try:
+        event = DeliveryCompleted.model_validate_json(message.data)
+    except ValidationError as exc:
+        metadata = message.metadata
+        diagnostic = {
+            "source_stream": metadata.stream,
+            "source_sequence": metadata.sequence.stream,
+            "source_subject": message.subject,
+            "consumer": "document-generator",
+            "reason": json.dumps(
+                exc.errors(include_input=False, include_url=False), default=str
+            ),
+            "payload_base64": base64.b64encode(message.data).decode("ascii"),
+        }
+        await js.publish(
+            "invalid.events.v1",
+            json.dumps(diagnostic).encode(),
+            headers={
+                "Nats-Msg-Id": f"invalid:{metadata.stream}:{metadata.sequence.stream}:document-generator"
+            },
+        )
+        log.error(
+            "invalid_delivery_event_isolated",
+            **diagnostic | {"payload_base64": "[redacted]"},
+        )
+        await message.ack()
+        return
+
+    async with sessions() as db:
+        await accept_delivery(db, event, font_path)
+    await message.ack()
 
 
 async def consume_deliveries(
@@ -33,10 +69,7 @@ async def consume_deliveries(
             continue
         for message in messages:
             try:
-                event = DeliveryCompleted.model_validate_json(message.data)
-                async with sessions() as db:
-                    await accept_delivery(db, event, font_path)
-                await message.ack()
+                await process_delivery_message(message, js, sessions, font_path)
             except Exception:
                 log.exception("delivery_document_failed")
                 await message.nak(delay=5)

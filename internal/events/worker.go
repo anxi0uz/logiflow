@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 )
+
+type invalidEventError struct{ reason string }
+
+func (e invalidEventError) Error() string { return e.reason }
 
 // Run relays committed Core events and receives document-ready notifications.
 // Work remains in PostgreSQL or JetStream while this worker is down.
@@ -50,6 +55,15 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 			}
 		}
 	}
+	if _, err := js.StreamInfo("LOGIFLOW_INVALID_EVENTS"); err != nil {
+		if _, err := js.AddStream(&nats.StreamConfig{
+			Name: "LOGIFLOW_INVALID_EVENTS", Subjects: []string{"invalid.events.v1"},
+		}); err != nil {
+			if _, infoErr := js.StreamInfo("LOGIFLOW_INVALID_EVENTS"); infoErr != nil {
+				return err
+			}
+		}
+	}
 	sub, err := js.PullSubscribe("document.ready.v1", "core-document-ready", nats.BindStream("LOGIFLOW_EVENTS"), nats.ManualAck())
 	if err != nil {
 		return err
@@ -64,7 +78,10 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 			return err
 		}
 		for _, message := range messages {
-			if err := receiveDocumentReady(ctx, db, message.Data); err != nil {
+			if err := handleDocumentReady(message.Data,
+				func(data []byte) error { return receiveDocumentReady(ctx, db, data) },
+				func(reason string) error { return isolateInvalidEvent(ctx, js, message, reason) },
+			); err != nil {
 				slog.ErrorContext(ctx, "document notification failed", slog.String("error", err.Error()))
 				_ = message.NakWithDelay(5 * time.Second)
 				continue
@@ -74,6 +91,39 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 			}
 		}
 	}
+	return nil
+}
+
+func handleDocumentReady(data []byte, receive func([]byte) error, isolate func(string) error) error {
+	err := receive(data)
+	var invalid invalidEventError
+	if errors.As(err, &invalid) {
+		return isolate(invalid.reason)
+	}
+	return err
+}
+
+func isolateInvalidEvent(ctx context.Context, js nats.JetStreamContext, message *nats.Msg, reason string) error {
+	metadata, err := message.Metadata()
+	if err != nil {
+		return err
+	}
+	diagnostic, err := json.Marshal(struct {
+		SourceStream   string `json:"source_stream"`
+		SourceSequence uint64 `json:"source_sequence"`
+		SourceSubject  string `json:"source_subject"`
+		Consumer       string `json:"consumer"`
+		Reason         string `json:"reason"`
+		PayloadBase64  string `json:"payload_base64"`
+	}{metadata.Stream, metadata.Sequence.Stream, message.Subject, "core-document-ready", reason, base64.StdEncoding.EncodeToString(message.Data)})
+	if err != nil {
+		return err
+	}
+	id := fmt.Sprintf("invalid:%s:%d:core-document-ready", metadata.Stream, metadata.Sequence.Stream)
+	if _, err := js.Publish("invalid.events.v1", diagnostic, nats.MsgId(id), nats.Context(ctx)); err != nil {
+		return err
+	}
+	slog.ErrorContext(ctx, "invalid document event isolated", slog.String("stream", metadata.Stream), slog.Uint64("sequence", metadata.Sequence.Stream), slog.String("reason", reason))
 	return nil
 }
 
@@ -121,10 +171,10 @@ func publishPending(ctx context.Context, db *pgxpool.Pool, js nats.JetStreamCont
 func receiveDocumentReady(ctx context.Context, db *pgxpool.Pool, data []byte) error {
 	var event DocumentReady
 	if err := json.Unmarshal(data, &event); err != nil {
-		return fmt.Errorf("decode document ready: %w", err)
+		return invalidEventError{fmt.Sprintf("decode document ready: %v", err)}
 	}
-	if event.EventID == uuid.Nil || event.DocumentID == uuid.Nil || event.UserID == uuid.Nil {
-		return fmt.Errorf("invalid document ready IDs")
+	if event.EventID == uuid.Nil || event.DocumentID == uuid.Nil || event.OrderID == uuid.Nil || event.UserID == uuid.Nil || event.Type != "delivery_confirmation" {
+		return invalidEventError{"invalid document ready required IDs or type"}
 	}
 	tx, err := db.Begin(ctx)
 	if err != nil {
