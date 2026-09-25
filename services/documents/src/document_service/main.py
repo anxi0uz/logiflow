@@ -1,4 +1,5 @@
 import asyncio
+import signal
 
 import grpc
 import nats
@@ -38,20 +39,43 @@ async def run() -> None:
     await server.start()
     log.info("document_service_started", grpc_port=settings.grpc_port)
 
-    tasks = [
+    workers = [
         asyncio.create_task(
-            consume_deliveries(js, session_factory, settings.font_path)
+            consume_deliveries(js, session_factory, settings.font_path),
+            name="consume_deliveries",
         ),
-        asyncio.create_task(publish_ready_events(js, session_factory)),
+        asyncio.create_task(
+            publish_ready_events(js, session_factory), name="publish_ready_events"
+        ),
     ]
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for shutdown_signal in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(shutdown_signal, stop.set)
+    stop_task = asyncio.create_task(stop.wait())
+    server_task = asyncio.create_task(server.wait_for_termination())
     try:
-        await server.wait_for_termination()
+        done, _ = await asyncio.wait(
+            [stop_task, server_task, *workers], return_when=asyncio.FIRST_COMPLETED
+        )
+        for worker in workers:
+            if worker in done:
+                worker.result()
+                raise RuntimeError(f"{worker.get_name()} stopped unexpectedly")
     finally:
-        for task in tasks:
+        for task in [stop_task, *workers]:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await server.stop(grace=5)
-        await nc.drain()
+        await asyncio.gather(stop_task, *workers, return_exceptions=True)
+        await server.stop(grace=3)
+        await server_task
+        try:
+            await asyncio.wait_for(nc.drain(), timeout=3)
+        except Exception:
+            log.warning("nats_drain_failed_during_shutdown", exc_info=True)
+            try:
+                await asyncio.wait_for(nc.close(), timeout=1)
+            except Exception:
+                log.warning("nats_close_failed_during_shutdown", exc_info=True)
         await engine.dispose()
 
 
