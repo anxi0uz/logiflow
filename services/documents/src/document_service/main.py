@@ -30,6 +30,15 @@ async def run() -> None:
         except APIError:
             # Core may have created the stream at the same instant.
             await js.stream_info("LOGIFLOW_EVENTS")
+    try:
+        await js.stream_info("LOGIFLOW_INVALID_EVENTS")
+    except NotFoundError:
+        try:
+            await js.add_stream(
+                name="LOGIFLOW_INVALID_EVENTS", subjects=["invalid.events.v1"]
+            )
+        except APIError:
+            await js.stream_info("LOGIFLOW_INVALID_EVENTS")
 
     server = grpc.aio.server()
     documents_pb2_grpc.add_DocumentInboxServicer_to_server(

@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: logiflow
+      POSTGRES_PASSWORD: ci-test-password
+      POSTGRES_DB: logiflow_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logiflow -d logiflow_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "ci-test-password"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "ci-test-password", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  documents-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: documents
+      POSTGRES_PASSWORD: ci-test-password
+      POSTGRES_DB: documents
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U documents -d documents"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js"]
+
+  osrm:
+    image: python:3.13-alpine
+    command: ["python", "/app/osrm_stub.py"]
+    volumes:
+      - ./scripts/osrm_stub.py:/app/osrm_stub.py:ro
+
+  documents:
+    build:
+      context: ../services/documents
+    restart: on-failure
+    environment:
+      DATABASE_URL: postgresql+psycopg://documents:ci-test-password@documents-postgres:5432/documents
+      NATS_URL: nats://nats:4222
+    depends_on:
+      documents-postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; socket.create_connection(("127.0.0.1", 50051), timeout=2).close()
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: ..
+    environment:
+      LOGIFLOW_DATABASE_HOST: postgres
+      LOGIFLOW_DATABASE_USER: logiflow
+      LOGIFLOW_DATABASE_PASSWORD: ci-test-password
+      LOGIFLOW_DATABASE_NAME: logiflow_test
+      LOGIFLOW_REDIS_ADDR: redis:6379
+      LOGIFLOW_REDIS_PASSWORD: ci-test-password
+      LOGIFLOW_JWT_KEY: ci-only-jwt-secret-at-least-32-characters
+      LOGIFLOW_NATS_ADDR: nats://nats:4222
+      LOGIFLOW_DOCUMENTS_ADDRESS: documents:50051
+      LOGIFLOW_ROUTING_BASEURL: http://osrm:8080
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      osrm:
+        condition: service_started
+      documents:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

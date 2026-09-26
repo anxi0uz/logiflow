@@ -351,6 +351,8 @@ go test ./...
 
 Для сервиса документов: `cd services/documents && uv run --group dev pytest -q`. Если полный стенд с Document Service поднят, HTTP E2E дополнительно проверяет появление PDF, скачивание только владельцем и связанное уведомление при `LOGIFLOW_E2E_DOCUMENTS=1`. Подробности — в [services/documents/README.md](services/documents/README.md).
 
+CI запускает все Go-пакеты, pytest и Ruff для Document Service, а также HTTP E2E в отдельном compose-стенде из `.github/compose.e2e.yml`. В этом стенде используется локальный OSRM-заглушка через `LOGIFLOW_ROUTING_BASEURL`; без этой переменной Core по-прежнему обращается к обычному OSRM.
+
 Проверка Core на настоящей PostgreSQL, включая полный lifecycle и конкурентное назначение одного ресурса:
 
 ```bash

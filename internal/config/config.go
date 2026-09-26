@@ -56,6 +56,10 @@ type Config struct {
 		Addr string `koanf:"addr"`
 	} `koanf:"nats"`
 
+	Routing struct {
+		BaseURL string `koanf:"baseurl"`
+	} `koanf:"routing"`
+
 	Documents struct {
 		Address string `koanf:"address"`
 	} `koanf:"documents"`

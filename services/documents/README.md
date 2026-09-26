@@ -11,6 +11,8 @@ After Core confirms delivery, it publishes a `delivery.completed.v1` event conta
 
 The service owns `documents` and `document_outbox` in its separate database. For this MVP, PDFs are small and stored as PostgreSQL `BYTEA`; object storage can replace that later without changing the external API. `order_id`, `user_id`, driver/vehicle IDs and addresses in the event are an immutable delivery snapshot, not foreign keys into Core's database. Repeated delivery events do not create duplicate documents.
 
+Malformed inter-service events are copied to the private JetStream stream `LOGIFLOW_INVALID_EVENTS` on subject `invalid.events.v1` before their source messages are acknowledged. Each diagnostic JSON record includes the source stream, sequence and subject, consumer, validation reason, and original bytes as `payload_base64`. Inspect the stream with JetStream tooling and use the source sequence to locate an event; restrict access because delivery payloads may contain customer data. Database or NATS failures keep the source message eligible for retry.
+
 Local dependencies are managed with `uv`:
 
 ```bash

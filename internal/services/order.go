@@ -52,7 +52,7 @@ type CreateOrderResult struct {
 }
 
 func NewOrderService(db *pgxpool.Pool, cfg config.Config) *OrderService {
-	return &OrderService{db: db, config: cfg, routePlanner: routing.OSRMPlanner{}}
+	return &OrderService{db: db, config: cfg, routePlanner: routing.OSRMPlanner{BaseURL: cfg.Routing.BaseURL}}
 }
 
 func (s *OrderService) orderPrice(distanceKm, weightKg, volumeM3 float64) float64 {

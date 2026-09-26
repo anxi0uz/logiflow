@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DeliveryCompleted(BaseModel):
@@ -18,6 +18,13 @@ class DeliveryCompleted(BaseModel):
     recipient_name: str | None = None
     driver_id: UUID
     vehicle_id: UUID
+
+    @field_validator("event_id", "order_id", "user_id", "driver_id", "vehicle_id")
+    @classmethod
+    def nonzero_id(cls, value: UUID) -> UUID:
+        if value.int == 0:
+            raise ValueError("ID must not be nil")
+        return value
 
 
 class DocumentReady(BaseModel):

@@ -1,5 +1,8 @@
 .git
+.env*
 .venv
+output/
+tmp/
 services/
 tests/
 **/__pycache__/
