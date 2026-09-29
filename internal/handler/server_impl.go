@@ -12,6 +12,7 @@ import (
 
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
+	"github.com/anxi0uz/logiflow/internal/dispatchpb"
 	"github.com/anxi0uz/logiflow/internal/documentpb"
 	"github.com/anxi0uz/logiflow/internal/models"
 	"github.com/anxi0uz/logiflow/internal/services"
@@ -66,6 +67,8 @@ type Server struct {
 	Hub            *Hub
 	DocumentClient documentpb.DocumentInboxClient
 	documentConn   *grpc.ClientConn
+	DispatchClient dispatchpb.DispatchRecommendationsClient
+	dispatchConn   *grpc.ClientConn
 }
 
 func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, cfg *config.Config) *Server {
@@ -87,12 +90,24 @@ func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, cfg *
 			s.DocumentClient = documentpb.NewDocumentInboxClient(conn)
 		}
 	}
+	if cfg.Dispatch.Address != "" {
+		conn, err := grpc.NewClient(cfg.Dispatch.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			slog.ErrorContext(ctx, "dispatch client unavailable", slog.String("error", err.Error()))
+		} else {
+			s.dispatchConn = conn
+			s.DispatchClient = dispatchpb.NewDispatchRecommendationsClient(conn)
+		}
+	}
 	return s
 }
 
 func (s *Server) Run() error {
 	if s.documentConn != nil {
 		defer s.documentConn.Close()
+	}
+	if s.dispatchConn != nil {
+		defer s.dispatchConn.Close()
 	}
 	r := chi.NewMux()
 	r.Use(cors.Handler(cors.Options{

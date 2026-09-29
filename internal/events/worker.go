@@ -45,12 +45,31 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := js.StreamInfo("LOGIFLOW_EVENTS"); err != nil {
+	stream, err := js.StreamInfo("LOGIFLOW_EVENTS")
+	if err != nil {
 		if _, err := js.AddStream(&nats.StreamConfig{
-			Name: "LOGIFLOW_EVENTS", Subjects: []string{"delivery.completed.v1", "document.ready.v1"},
+			Name: "LOGIFLOW_EVENTS", Subjects: []string{"delivery.completed.v1", "document.ready.v1", "dispatch.requested.v1", "dispatch.recommended.v1"},
 		}); err != nil {
 			// The document service can win the create race during startup.
-			if _, infoErr := js.StreamInfo("LOGIFLOW_EVENTS"); infoErr != nil {
+			if stream, err = js.StreamInfo("LOGIFLOW_EVENTS"); err != nil {
+				return err
+			}
+		}
+	}
+	if stream != nil {
+		subjects := map[string]bool{}
+		for _, subject := range stream.Config.Subjects {
+			subjects[subject] = true
+		}
+		changed := false
+		for _, subject := range []string{"dispatch.requested.v1", "dispatch.recommended.v1"} {
+			if !subjects[subject] {
+				stream.Config.Subjects = append(stream.Config.Subjects, subject)
+				changed = true
+			}
+		}
+		if changed {
+			if _, err := js.UpdateStream(&stream.Config); err != nil {
 				return err
 			}
 		}
@@ -65,6 +84,10 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 		}
 	}
 	sub, err := js.PullSubscribe("document.ready.v1", "core-document-ready", nats.BindStream("LOGIFLOW_EVENTS"), nats.ManualAck())
+	if err != nil {
+		return err
+	}
+	dispatchSub, err := js.PullSubscribe("dispatch.recommended.v1", "core-dispatch-recommended", nats.BindStream("LOGIFLOW_EVENTS"), nats.ManualAck())
 	if err != nil {
 		return err
 	}
@@ -90,6 +113,25 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 				return err
 			}
 		}
+		dispatchMessages, err := dispatchSub.Fetch(10, nats.MaxWait(time.Second))
+		if err != nil && !errors.Is(err, nats.ErrTimeout) {
+			return err
+		}
+		for _, message := range dispatchMessages {
+			if err := handleDocumentReady(message.Data,
+				func(data []byte) error { return receiveDispatchRecommended(ctx, db, data) },
+				func(reason string) error {
+					return isolateInvalidEventFor(ctx, js, message, reason, "core-dispatch-recommended")
+				},
+			); err != nil {
+				slog.ErrorContext(ctx, "dispatch recommendation failed", slog.String("error", err.Error()))
+				_ = message.NakWithDelay(5 * time.Second)
+				continue
+			}
+			if err := message.Ack(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -104,6 +146,10 @@ func handleDocumentReady(data []byte, receive func([]byte) error, isolate func(s
 }
 
 func isolateInvalidEvent(ctx context.Context, js nats.JetStreamContext, message *nats.Msg, reason string) error {
+	return isolateInvalidEventFor(ctx, js, message, reason, "core-document-ready")
+}
+
+func isolateInvalidEventFor(ctx context.Context, js nats.JetStreamContext, message *nats.Msg, reason, consumer string) error {
 	metadata, err := message.Metadata()
 	if err != nil {
 		return err
@@ -115,11 +161,11 @@ func isolateInvalidEvent(ctx context.Context, js nats.JetStreamContext, message 
 		Consumer       string `json:"consumer"`
 		Reason         string `json:"reason"`
 		PayloadBase64  string `json:"payload_base64"`
-	}{metadata.Stream, metadata.Sequence.Stream, message.Subject, "core-document-ready", reason, base64.StdEncoding.EncodeToString(message.Data)})
+	}{metadata.Stream, metadata.Sequence.Stream, message.Subject, consumer, reason, base64.StdEncoding.EncodeToString(message.Data)})
 	if err != nil {
 		return err
 	}
-	id := fmt.Sprintf("invalid:%s:%d:core-document-ready", metadata.Stream, metadata.Sequence.Stream)
+	id := fmt.Sprintf("invalid:%s:%d:%s", metadata.Stream, metadata.Sequence.Stream, consumer)
 	if _, err := js.Publish("invalid.events.v1", diagnostic, nats.MsgId(id), nats.Context(ctx)); err != nil {
 		return err
 	}

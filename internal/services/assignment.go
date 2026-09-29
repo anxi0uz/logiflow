@@ -76,6 +76,19 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 			return nil, err
 		}
 	}
+	request, err := buildDispatchRequest(ctx, tx, order)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	if err := storage.Create(ctx, "integration_outbox", models.IntegrationEvent{
+		ID: request.EventID, Subject: "dispatch.requested.v1", Payload: payload, CreatedAt: now,
+	}, tx); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit submit order: %w", err)
 	}
@@ -297,6 +310,34 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 	}
 	if source != "manual" && source != "dispatch_recommendation" {
 		return nil, ErrAssignmentStale
+	}
+	if source == "dispatch_recommendation" {
+		if req.RecommendationId == nil || req.RecommendationCreatedAt == nil || order.SubmittedAt == nil {
+			return nil, ErrAssignmentStale
+		}
+		var submittedAt, createdAt time.Time
+		var candidatesJSON []byte
+		if err := tx.QueryRow(ctx, `SELECT submitted_at, created_at, candidates FROM dispatch_recommendations WHERE order_id = $1`, orderID).
+			Scan(&submittedAt, &createdAt, &candidatesJSON); err != nil {
+			return nil, ErrAssignmentStale
+		}
+		if !submittedAt.Equal(*order.SubmittedAt) || !createdAt.Equal(*req.RecommendationCreatedAt) {
+			return nil, ErrAssignmentStale
+		}
+		var candidates []events.DispatchCandidate
+		if err := json.Unmarshal(candidatesJSON, &candidates); err != nil {
+			return nil, err
+		}
+		matched := false
+		for _, candidate := range candidates {
+			if candidate.ID == *req.RecommendationId && candidate.DriverID == req.DriverId && candidate.VehicleID == req.VehicleId {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, ErrAssignmentStale
+		}
 	}
 	if previous != nil {
 		previous.Status = models.AssignmentReleased

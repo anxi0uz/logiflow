@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package logiflow.dispatch.v1;
+
+option go_package = "github.com/anxi0uz/logiflow/internal/dispatchpb;dispatchpb";
+
+// Synchronous recalculation uses the same versioned JSON snapshot/result as NATS.
+service DispatchRecommendations {
+  rpc Recommend(RecommendRequest) returns (RecommendResponse);
+}
+
+message RecommendRequest {
+  bytes snapshot_json = 1;
+}
+
+message RecommendResponse {
+  bytes recommendations_json = 1;
+}

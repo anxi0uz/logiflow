@@ -66,6 +66,25 @@ services:
       timeout: 3s
       retries: 30
 
+  dispatch:
+    build:
+      context: ../services/dispatch
+    restart: on-failure
+    environment:
+      NATS_URL: nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; socket.create_connection(("127.0.0.1", 50052), timeout=2).close()
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   app:
     build:
       context: ..
@@ -79,6 +98,7 @@ services:
       LOGIFLOW_JWT_KEY: ci-only-jwt-secret-at-least-32-characters
       LOGIFLOW_NATS_ADDR: nats://nats:4222
       LOGIFLOW_DOCUMENTS_ADDRESS: documents:50051
+      LOGIFLOW_DISPATCH_ADDRESS: dispatch:50052
       LOGIFLOW_ROUTING_BASEURL: http://osrm:8080
     ports:
       - "127.0.0.1:3001:3001"
@@ -92,6 +112,8 @@ services:
       osrm:
         condition: service_started
       documents:
+        condition: service_healthy
+      dispatch:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/health/ready"]

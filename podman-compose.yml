@@ -85,6 +85,18 @@ services:
       nats:
         condition: service_started
 
+  dispatch:
+    networks:
+      - default
+    build:
+      context: ./services/dispatch
+    restart: always
+    environment:
+      NATS_URL: nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_started
+
   prometheus:
     networks:
       - default
@@ -126,6 +138,8 @@ services:
       - "3001:3001"
     env_file:
       - .env
+    environment:
+      LOGIFLOW_DISPATCH_ADDRESS: dispatch:50052
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,6 +148,8 @@ services:
       nats:
         condition: service_started
       documents:
+        condition: service_started
+      dispatch:
         condition: service_started
 
 volumes:

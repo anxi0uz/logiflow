@@ -19,6 +19,7 @@ import (
 // --- Mock ---
 
 type mockOrderService struct {
+	services.OrderServicer
 	updateDraftOrder     func(context.Context, uuid.UUID, uuid.UUID, string, api.OrderDraftUpdate) (*models.Order, error)
 	listAssignments      func(context.Context, uuid.UUID, string, api.ListAssignmentsParams) ([]models.Assignment, error)
 	listOrderAssignments func(context.Context, uuid.UUID, uuid.UUID, string) ([]models.Assignment, error)
