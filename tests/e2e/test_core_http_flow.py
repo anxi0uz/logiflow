@@ -173,22 +173,55 @@ def test_order_flow_and_concurrent_reservation():
             call("POST", f"/api/v1/orders/{order_id}/submit", tokens["client"])
             return order_id, start, end
 
-        def propose(order_id, start, end, driver_id, manager="manager1"):
+        def propose(order_id, start, end, driver_id, manager="manager1", recommendation=None):
+            body = {
+                "driverId": str(driver_id),
+                "vehicleId": str(vehicle_id),
+                "plannedFrom": start.isoformat(),
+                "plannedTo": end.isoformat(),
+            }
+            if recommendation:
+                body.update(
+                    {
+                        "source": "dispatch_recommendation",
+                        "recommendationId": recommendation["id"],
+                        "recommendationCreatedAt": recommendation["createdAt"],
+                    }
+                )
             return call(
                 "POST",
                 f"/api/v1/orders/{order_id}/assignments",
                 tokens[manager],
-                {
-                    "driverId": str(driver_id),
-                    "vehicleId": str(vehicle_id),
-                    "plannedFrom": start.isoformat(),
-                    "plannedTo": end.isoformat(),
-                },
+                body,
                 201,
             )["data"]["assignment"]
 
         # One order: edit draft, submit, reject, reassign, deliver.
         order_id, start, end = create_and_submit(2)
+        call(
+            "GET",
+            f"/api/v1/orders/{order_id}/dispatch-recommendations",
+            tokens["client"],
+            expected=403,
+        )
+        for _ in range(60):
+            async_result = call(
+                "GET",
+                f"/api/v1/orders/{order_id}/dispatch-recommendations",
+                tokens["manager1"],
+            )["data"]["success"]
+            if async_result["status"] == "ready":
+                break
+            time.sleep(0.2)
+        assert async_result["status"] == "ready"
+        assert async_result["candidates"]
+        refreshed = call(
+            "POST",
+            f"/api/v1/orders/{order_id}/dispatch-recommendations",
+            tokens["manager1"],
+        )["data"]["success"]
+        assert refreshed["status"] == "ready"
+        assert refreshed["candidates"]
         first = propose(order_id, start, end, driver_ids[0])
         call(
             "POST",
@@ -223,7 +256,20 @@ def test_order_flow_and_concurrent_reservation():
             ]["status"]
             == "ready_for_dispatch"
         )
-        second = propose(order_id, start, end, driver_ids[1])
+        refreshed = call(
+            "POST",
+            f"/api/v1/orders/{order_id}/dispatch-recommendations",
+            tokens["manager1"],
+        )["data"]["success"]
+        candidate = next(
+            c
+            for c in refreshed["candidates"]
+            if c["driver_id"] == str(driver_ids[1])
+            and c["vehicle_id"] == str(vehicle_id)
+        )
+        candidate["createdAt"] = refreshed["createdAt"]
+        second = propose(order_id, start, end, driver_ids[1], recommendation=candidate)
+        assert second["source"] == "dispatch_recommendation"
         assert (
             call(
                 "POST", f"/api/v1/assignments/{second['id']}/accept", tokens["driver2"]

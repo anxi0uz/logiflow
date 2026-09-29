@@ -571,6 +571,26 @@ components:
           type: string
           nullable: true
 
+    DispatchCandidate:
+      type: object
+      required: [id, driver_id, vehicle_id, score, reason]
+      properties:
+        id: { type: string, format: uuid }
+        driver_id: { type: string, format: uuid }
+        vehicle_id: { type: string, format: uuid }
+        score: { type: number }
+        reason: { type: string }
+
+    DispatchRecommendations:
+      type: object
+      required: [status, candidates]
+      properties:
+        status: { type: string, enum: [pending, ready, unavailable] }
+        createdAt: { type: string, format: date-time, nullable: true }
+        candidates:
+          type: array
+          items: { $ref: "#/components/schemas/DispatchCandidate" }
+
     DeliveryComplete:
       type: object
       properties:
@@ -1469,6 +1489,37 @@ paths:
       responses:
         "201": { description: Назначение создано }
         "409": { description: Ресурс занят или состояние изменилось }
+
+  /api/v1/orders/{id}/dispatch-recommendations:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getDispatchRecommendations
+      summary: Текущие рекомендации для менеджера
+      description: Возвращает pending, ready или unavailable; рекомендации не резервируют ресурсы.
+      tags: [Assignments]
+      responses:
+        "200":
+          description: Состояние и кандидаты
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiResponse" }
+        "403": { description: Нет доступа }
+    post:
+      operationId: refreshDispatchRecommendations
+      summary: Пересчитать рекомендации синхронно
+      tags: [Assignments]
+      responses:
+        "200":
+          description: Новые кандидаты
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiResponse" }
+        "409": { description: Заказ уже не ожидает назначения }
+        "503": { description: Dispatch недоступен }
 
   /api/v1/assignments:
     get:

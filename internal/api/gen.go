@@ -649,6 +649,12 @@ type ServerInterface interface {
 	// Отменить заказ
 	// (POST /api/v1/orders/{id}/cancel)
 	CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Текущие рекомендации для менеджера
+	// (GET /api/v1/orders/{id}/dispatch-recommendations)
+	GetDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Пересчитать рекомендации синхронно
+	// (POST /api/v1/orders/{id}/dispatch-recommendations)
+	RefreshDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Подготовить заказ к диспетчеризации
 	// (POST /api/v1/orders/{id}/submit)
 	SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -859,6 +865,18 @@ func (_ Unimplemented) CreateAssignment(w http.ResponseWriter, r *http.Request, 
 // Отменить заказ
 // (POST /api/v1/orders/{id}/cancel)
 func (_ Unimplemented) CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Текущие рекомендации для менеджера
+// (GET /api/v1/orders/{id}/dispatch-recommendations)
+func (_ Unimplemented) GetDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Пересчитать рекомендации синхронно
+// (POST /api/v1/orders/{id}/dispatch-recommendations)
+func (_ Unimplemented) RefreshDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1487,6 +1505,56 @@ func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CancelOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDispatchRecommendations operation middleware
+func (siw *ServerInterfaceWrapper) GetDispatchRecommendations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDispatchRecommendations(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RefreshDispatchRecommendations operation middleware
+func (siw *ServerInterfaceWrapper) RefreshDispatchRecommendations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RefreshDispatchRecommendations(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2488,6 +2556,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/cancel", wrapper.CancelOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/dispatch-recommendations", wrapper.GetDispatchRecommendations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/dispatch-recommendations", wrapper.RefreshDispatchRecommendations)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/submit", wrapper.SubmitOrder)

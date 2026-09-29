@@ -63,6 +63,9 @@ type Config struct {
 	Documents struct {
 		Address string `koanf:"address"`
 	} `koanf:"documents"`
+	Dispatch struct {
+		Address string `koanf:"address"`
+	} `koanf:"dispatch"`
 
 	JwtOpt struct {
 		Key      string `koanf:"key"`
@@ -175,6 +178,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Documents.Address == "" {
 		c.Documents.Address = "localhost:50051"
+	}
+	if c.Dispatch.Address == "" {
+		c.Dispatch.Address = "localhost:50052"
 	}
 	if c.Pricing.BaseFee == 0 {
 		c.Pricing.BaseFee = 500.0

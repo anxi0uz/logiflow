@@ -10,6 +10,7 @@ import (
 
 	api "github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/config"
+	"github.com/anxi0uz/logiflow/internal/events"
 	"github.com/anxi0uz/logiflow/internal/models"
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/anxi0uz/logiflow/pkg/routing"
@@ -42,6 +43,8 @@ type OrderServicer interface {
 	CompleteAssignment(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string, req api.DeliveryComplete) (*models.Assignment, error)
 	GetOrdersReport(ctx context.Context, userID uuid.UUID, role string, params api.GetOrdersReportParams) ([]models.Order, error)
 	GetDashboard(ctx context.Context, userID uuid.UUID, role string) (*models.DashboardReport, error)
+	GetDispatchRecommendations(ctx context.Context, orderID, userID uuid.UUID, role string) (*DispatchRecommendations, error)
+	BuildDispatchRequest(ctx context.Context, orderID, userID uuid.UUID, role string) (*events.DispatchRequest, error)
 }
 
 var ErrCannotCancel = ErrInvalidOrderTransition

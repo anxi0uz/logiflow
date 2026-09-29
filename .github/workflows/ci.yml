@@ -50,6 +50,22 @@ jobs:
       - name: Ruff format
         run: uv run --no-sync ruff format --check .
 
+  dispatch-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/dispatch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --group dev
+      - run: uv run --no-sync pytest -q
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 25

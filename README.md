@@ -13,8 +13,8 @@
 **Backend:**
 - **Go 1.25** — Chi v5, oapi-codegen, pgx/v5, go-redis, errgroup
 - **PostgreSQL** — миграции через Goose
-- **Python 3.13 + uv** — отдельный сервис генерации PDF в личный ящик; своя PostgreSQL и Alembic
-- **NATS JetStream + gRPC** — события завершения доставки/готовности документа и приватный запрос ящика из Core
+- **Python 3.13 + uv** — сервис PDF с собственной PostgreSQL и сервис рекомендаций Dispatch
+- **NATS JetStream + gRPC** — события документов и автоматического подбора; приватные запросы ящика и пересчёта рекомендаций
 - **Redis** — хранение JWT access/refresh токенов
 - **Nominatim** — геокодинг адресов (OpenStreetMap, без ключа)
 - **OSRM** — построение маршрутов и расчёт дистанции
@@ -283,6 +283,8 @@ Authorization: Bearer <access_token>
 
 `completed` и `cancelled` — терминальные состояния. Занятость водителя и транспорта определяется открытыми Assignment с пересекающимся временным окном, а не ручным переключением `available`.
 
+При отправке заказа Core передаёт Dispatch снимок подходящих ресурсов через NATS. Dispatch возвращает до пяти рекомендаций; менеджер читает их через `GET /api/v1/orders/{id}/dispatch-recommendations` и может пересчитать через `POST` по тому же пути (приватный gRPC). Рекомендация не резервирует ресурс: Core повторно проверяет водителя, транспорт и окно при создании Assignment.
+
 ## Архитектура
 
 ```
@@ -349,9 +351,9 @@ Datasource Grafana: `configs/datasources/`
 go test ./...
 ```
 
-Для сервиса документов: `cd services/documents && uv run --group dev pytest -q`. Если полный стенд с Document Service поднят, HTTP E2E дополнительно проверяет появление PDF, скачивание только владельцем и связанное уведомление при `LOGIFLOW_E2E_DOCUMENTS=1`. Подробности — в [services/documents/README.md](services/documents/README.md).
+Для Python-сервисов: в `services/documents` и `services/dispatch` запусти `uv run --group dev pytest -q`. HTTP E2E проверяет рекомендации, а при `LOGIFLOW_E2E_DOCUMENTS=1` — также PDF, доступ владельца и уведомление. Подробности — в README соответствующего сервиса.
 
-CI запускает все Go-пакеты, pytest и Ruff для Document Service, а также HTTP E2E в отдельном compose-стенде из `.github/compose.e2e.yml`. В этом стенде используется локальный OSRM-заглушка через `LOGIFLOW_ROUTING_BASEURL`; без этой переменной Core по-прежнему обращается к обычному OSRM.
+CI запускает все Go-пакеты, pytest и Ruff для обоих Python-сервисов, а также HTTP E2E в отдельном compose-стенде из `.github/compose.e2e.yml`. В этом стенде используется локальный OSRM-заглушка через `LOGIFLOW_ROUTING_BASEURL`; без этой переменной Core по-прежнему обращается к обычному OSRM.
 
 Проверка Core на настоящей PostgreSQL, включая полный lifecycle и конкурентное назначение одного ресурса:
 
