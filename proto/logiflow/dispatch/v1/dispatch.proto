@@ -4,13 +4,13 @@ package logiflow.dispatch.v1;
 
 option go_package = "github.com/anxi0uz/logiflow/internal/dispatchpb;dispatchpb";
 
-// Synchronous recalculation uses the same versioned JSON snapshot/result as NATS.
+// Synchronous recalculation uses the same order trigger/result JSON as NATS.
 service DispatchRecommendations {
   rpc Recommend(RecommendRequest) returns (RecommendResponse);
 }
 
 message RecommendRequest {
-  bytes snapshot_json = 1;
+  bytes snapshot_json = 1; // Compact trigger; field name retained for wire compatibility.
 }
 
 message RecommendResponse {

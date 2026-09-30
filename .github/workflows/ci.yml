@@ -81,6 +81,7 @@ jobs:
         env:
           LOGIFLOW_E2E_BASE_URL: http://127.0.0.1:3001
           LOGIFLOW_E2E_DATABASE_URL: postgres://logiflow:ci-test-password@127.0.0.1:55432/logiflow_test?sslmode=disable
+          LOGIFLOW_E2E_DISPATCH_DATABASE_URL: postgres://dispatch_reader:ci-dispatch-password@127.0.0.1:55432/logiflow_test?sslmode=disable
           LOGIFLOW_E2E_DOCUMENTS: '1'
         run: uv run --with pytest --with httpx --with 'psycopg[binary]' pytest -q tests/e2e/test_core_http_flow.py
       - name: Container logs on failure

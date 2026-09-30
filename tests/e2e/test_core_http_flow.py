@@ -29,6 +29,16 @@ def test_order_flow_and_concurrent_reservation():
         pytest.fail("E2E test requires an isolated database named logiflow_test")
 
     db = psycopg.connect(database_url, autocommit=True)
+    dispatch_database_url = os.getenv("LOGIFLOW_E2E_DISPATCH_DATABASE_URL")
+    if dispatch_database_url:
+        if urlparse(dispatch_database_url).path != "/logiflow_test":
+            pytest.fail("Dispatch E2E connection must use logiflow_test")
+        with psycopg.connect(dispatch_database_url, autocommit=True) as reader:
+            assert reader.execute("SELECT count(*) FROM orders").fetchone() is not None
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT count(*) FROM users")
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("UPDATE orders SET status = status WHERE FALSE")
     http = httpx.Client(base_url=base_url, timeout=30)
     suffix = uuid4().hex[:12]
     user_ids = {}
