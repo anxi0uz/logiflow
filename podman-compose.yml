@@ -26,6 +26,24 @@ services:
       timeout: 5s
       retries: 5
 
+  dispatch-db-role:
+    networks:
+      - default
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: ${LOGIFLOW_DATABASE_USER}
+      PGPASSWORD: ${LOGIFLOW_DATABASE_PASSWORD}
+      PGDATABASE: ${LOGIFLOW_DATABASE_NAME}
+      DISPATCH_DATABASE_PASSWORD: ${LOGIFLOW_DISPATCH_DATABASE_PASSWORD:-dispatch-local}
+    volumes:
+      - ./configs/dispatch_reader_role.sh:/bootstrap/dispatch_reader_role.sh:ro
+      - ./configs/dispatch_reader_role.sql:/bootstrap/dispatch_reader_role.sql:ro
+    entrypoint: ["/bin/sh", "/bootstrap/dispatch_reader_role.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     networks:
       - default
@@ -92,8 +110,14 @@ services:
       context: ./services/dispatch
     restart: always
     environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: ${LOGIFLOW_DATABASE_NAME}
+      DATABASE_USER: dispatch_reader
+      DATABASE_PASSWORD: ${LOGIFLOW_DISPATCH_DATABASE_PASSWORD:-dispatch-local}
       NATS_URL: nats://nats:4222
     depends_on:
+      dispatch-db-role:
+        condition: service_completed_successfully
       nats:
         condition: service_started
 

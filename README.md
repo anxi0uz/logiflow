@@ -68,6 +68,7 @@ LOGIFLOW_DATABASE_NAME=logiflow
 LOGIFLOW_REDIS_PASSWORD=yourredispassword
 LOGIFLOW_JWT_KEY=your-secret-jwt-key-min-32-chars
 LOGIFLOW_DOCUMENTS_DATABASE_PASSWORD=your-documents-db-password
+LOGIFLOW_DISPATCH_DATABASE_PASSWORD=your-dispatch-db-password
 ```
 
 > `LOGIFLOW_JWT_KEY` — любая случайная строка, минимум 32 символа.
@@ -283,7 +284,7 @@ Authorization: Bearer <access_token>
 
 `completed` и `cancelled` — терминальные состояния. Занятость водителя и транспорта определяется открытыми Assignment с пересекающимся временным окном, а не ручным переключением `available`.
 
-При отправке заказа Core передаёт Dispatch снимок подходящих ресурсов через NATS. Dispatch возвращает до пяти рекомендаций; менеджер читает их через `GET /api/v1/orders/{id}/dispatch-recommendations` и может пересчитать через `POST` по тому же пути (приватный gRPC). Рекомендация не резервирует ресурс: Core повторно проверяет водителя, транспорт и окно при создании Assignment.
+При отправке заказа Core передаёт Dispatch только ID заказа и метки времени через NATS. Dispatch после коммита читает заказ и подходящие ресурсы из Core PostgreSQL под отдельным пользователем `dispatch_reader`, которому доступны на чтение только нужные таблицы. Он возвращает до пяти рекомендаций; менеджер читает их через `GET /api/v1/orders/{id}/dispatch-recommendations` и может пересчитать через `POST` по тому же пути (приватный gRPC). Рекомендация не резервирует ресурс: Core повторно проверяет водителя, транспорт и окно при создании Assignment.
 
 ## Архитектура
 

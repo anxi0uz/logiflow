@@ -3,17 +3,21 @@ import base64
 import json
 
 import structlog
+from nats.aio.msg import Msg
+from nats.js.client import JetStreamContext
 from pydantic import ValidationError
 
-from dispatch_service.ranking import recommend
-from dispatch_service.schemas import Request
+from dispatch_service.modules.recommendations.schemas import RecommendationTrigger
+from dispatch_service.modules.recommendations.service import RecommendationService
 
 log = structlog.get_logger(component="dispatch.events")
 
 
-async def process_message(message, js):
+async def process_message(
+    message: Msg, js: JetStreamContext, service: RecommendationService
+) -> None:
     try:
-        request = Request.model_validate_json(message.data)
+        trigger = RecommendationTrigger.model_validate_json(message.data)
     except ValidationError as exc:
         metadata = message.metadata
         diagnostic = {
@@ -34,16 +38,22 @@ async def process_message(message, js):
         log.error("invalid_dispatch_request", reason=diagnostic["reason"])
         await message.ack()
         return
-    result = recommend(request)
+    result = await service.recommend(trigger)
+    if result is None:
+        log.info("dispatch_request_stale", order_id=str(trigger.order_id))
+        await message.ack()
+        return
     await js.publish(
         "dispatch.recommended.v1",
         result.model_dump_json().encode(),
-        headers={"Nats-Msg-Id": f"dispatch-result:{request.event_id}"},
+        headers={"Nats-Msg-Id": f"dispatch-result:{trigger.event_id}"},
     )
     await message.ack()
 
 
-async def consume_requests(js):
+async def consume_requests(
+    js: JetStreamContext, service: RecommendationService
+) -> None:
     subscription = await js.pull_subscribe(
         "dispatch.requested.v1",
         durable="dispatch-recommender",
@@ -60,7 +70,7 @@ async def consume_requests(js):
             continue
         for message in messages:
             try:
-                await process_message(message, js)
+                await process_message(message, js, service)
             except Exception:
                 log.exception("dispatch_recommendation_failed")
                 await message.nak(delay=5)

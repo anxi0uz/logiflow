@@ -13,6 +13,22 @@ services:
       timeout: 2s
       retries: 30
 
+  dispatch-db-role:
+    image: postgres:17-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: logiflow
+      PGPASSWORD: ci-test-password
+      PGDATABASE: logiflow_test
+      DISPATCH_DATABASE_PASSWORD: ci-dispatch-password
+    volumes:
+      - ../configs/dispatch_reader_role.sh:/bootstrap/dispatch_reader_role.sh:ro
+      - ../configs/dispatch_reader_role.sql:/bootstrap/dispatch_reader_role.sql:ro
+    entrypoint: ["/bin/sh", "/bootstrap/dispatch_reader_role.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--requirepass", "ci-test-password"]
@@ -71,8 +87,14 @@ services:
       context: ../services/dispatch
     restart: on-failure
     environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: logiflow_test
+      DATABASE_USER: dispatch_reader
+      DATABASE_PASSWORD: ci-dispatch-password
       NATS_URL: nats://nats:4222
     depends_on:
+      dispatch-db-role:
+        condition: service_completed_successfully
       nats:
         condition: service_started
     healthcheck:

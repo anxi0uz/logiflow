@@ -1,11 +1,36 @@
 from datetime import UTC, datetime
 from uuid import uuid5
 
-from dispatch_service.schemas import Candidate, Recommended, Request
+import structlog
+
+from dispatch_service.modules.recommendations.repository import FleetRepository
+from dispatch_service.modules.recommendations.schemas import (
+    RecommendationCandidate,
+    RecommendationRequest,
+    RecommendationResult,
+    RecommendationTrigger,
+)
+
+log = structlog.get_logger(component="recommendations.service")
 
 
-def recommend(request: Request) -> Recommended:
-    candidates = []
+class RecommendationService:
+    def __init__(self, repository: FleetRepository) -> None:
+        self.repository = repository
+
+    async def recommend(
+        self, trigger: RecommendationTrigger
+    ) -> RecommendationResult | None:
+        request = await self.repository.load_request(trigger)
+        if request is None:
+            return None
+        return recommend_candidates(request)
+
+
+def recommend_candidates(
+    request: RecommendationRequest,
+) -> RecommendationResult:
+    candidates: list[RecommendationCandidate] = []
     for driver in request.drivers:
         for vehicle in request.vehicles:
             if (
@@ -22,7 +47,7 @@ def recommend(request: Request) -> Recommended:
             )
             score = round(driver.rating * 20 + (1 - (spare_kg + spare_m3) / 2) * 10, 2)
             candidates.append(
-                Candidate(
+                RecommendationCandidate(
                     id=str(uuid5(request.event_id, f"{driver.id}:{vehicle.id}")),
                     driver_id=driver.id,
                     vehicle_id=vehicle.id,
@@ -31,7 +56,7 @@ def recommend(request: Request) -> Recommended:
                 )
             )
     candidates.sort(key=lambda c: (-c.score, str(c.driver_id), str(c.vehicle_id)))
-    return Recommended(
+    result = RecommendationResult(
         event_id=request.event_id,
         order_id=request.order_id,
         submitted_at=request.submitted_at,
@@ -39,3 +64,13 @@ def recommend(request: Request) -> Recommended:
         created_at=datetime.now(UTC),
         candidates=candidates[:5],
     )
+
+    log.info(
+        "recommendations_created",
+        order_id=str(request.order_id),
+        driver_count=len(request.drivers),
+        vehicle_count=len(request.vehicles),
+        candidate_count=len(result.candidates),
+    )
+
+    return result

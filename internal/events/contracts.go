@@ -30,28 +30,11 @@ type DocumentReady struct {
 	Type       string    `json:"type"`
 }
 
-type DispatchDriver struct {
-	ID     uuid.UUID `json:"id"`
-	Rating float64   `json:"rating"`
-}
-
-type DispatchVehicle struct {
-	ID         uuid.UUID `json:"id"`
-	CapacityKg float64   `json:"capacity_kg"`
-	CapacityM3 float64   `json:"capacity_m3"`
-}
-
 type DispatchRequest struct {
-	EventID     uuid.UUID         `json:"event_id"`
-	OrderID     uuid.UUID         `json:"order_id"`
-	SubmittedAt time.Time         `json:"submitted_at"`
-	RequestedAt time.Time         `json:"requested_at"`
-	PlannedFrom time.Time         `json:"planned_from"`
-	PlannedTo   time.Time         `json:"planned_to"`
-	WeightKg    float64           `json:"weight_kg"`
-	VolumeM3    float64           `json:"volume_m3"`
-	Drivers     []DispatchDriver  `json:"drivers"`
-	Vehicles    []DispatchVehicle `json:"vehicles"`
+	EventID     uuid.UUID `json:"event_id"`
+	OrderID     uuid.UUID `json:"order_id"`
+	SubmittedAt time.Time `json:"submitted_at"`
+	RequestedAt time.Time `json:"requested_at"`
 }
 
 type DispatchCandidate struct {

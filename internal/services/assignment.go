@@ -76,10 +76,7 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 			return nil, err
 		}
 	}
-	request, err := buildDispatchRequest(ctx, tx, order)
-	if err != nil {
-		return nil, err
-	}
+	request := buildDispatchRequest(order)
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
