@@ -76,14 +76,7 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 			return nil, err
 		}
 	}
-	request := buildDispatchRequest(order)
-	payload, err := json.Marshal(request)
-	if err != nil {
-		return nil, err
-	}
-	if err := storage.Create(ctx, "integration_outbox", models.IntegrationEvent{
-		ID: request.EventID, Subject: "dispatch.requested.v1", Payload: payload, CreatedAt: now,
-	}, tx); err != nil {
+	if err := enqueueDispatchRequest(ctx, tx, order); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -181,6 +174,11 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 	}
 	if order.CreatedByID != nil && *order.CreatedByID != userID {
 		if err := s.notify(ctx, tx, *order.CreatedByID, "Заказ отменён", fmt.Sprintf("Заказ %s отменён менеджером", id)); err != nil {
+			return nil, err
+		}
+	}
+	for i := range assignments {
+		if err := s.enqueueDispatchAfterRelease(ctx, tx, &assignments[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -390,6 +388,11 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 	if err := s.notify(ctx, tx, driver.UserID, "Новое назначение", fmt.Sprintf("Предложение %s по заказу %s: примите или отклоните до истечения срока", assignment.ID, orderID)); err != nil {
 		return nil, err
 	}
+	if previous != nil {
+		if err := s.enqueueDispatchAfterRelease(ctx, tx, previous); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit assignment: %w", err)
 	}
@@ -418,13 +421,7 @@ func (s *OrderService) AcceptAssignment(ctx context.Context, id uuid.UUID, userI
 	}
 	now := time.Now()
 	if !now.Before(assignment.OfferExpiresAt) {
-		assignment.Status = models.AssignmentExpired
-		if err := storage.Update(ctx, "assignments", *assignment, tx, func(ub *sqlbuilder.UpdateBuilder) {
-			ub.Where(ub.EQ("id", id))
-		}); err != nil {
-			return nil, err
-		}
-		if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Предложение истекло", fmt.Sprintf("Назначение %s по заказу %s не принято вовремя", id, order.ID)); err != nil {
+		if err := s.expireAssignment(ctx, tx, assignment, now); err != nil {
 			return nil, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -432,6 +429,7 @@ func (s *OrderService) AcceptAssignment(ctx context.Context, id uuid.UUID, userI
 		}
 		return nil, ErrAssignmentExpired
 	}
+
 	if order.Status != models.OrderReadyForDispatch {
 		return nil, ErrInvalidOrderTransition
 	}
@@ -501,6 +499,9 @@ func (s *OrderService) RejectAssignment(ctx context.Context, id uuid.UUID, userI
 		return nil, err
 	}
 	if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Назначение отклонено", fmt.Sprintf("Водитель отклонил назначение %s по заказу %s", id, assignment.OrderID)); err != nil {
+		return nil, err
+	}
+	if err := s.enqueueDispatchAfterRelease(ctx, tx, assignment); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -669,6 +670,9 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 			return nil, err
 		}
 	}
+	if err := s.enqueueDispatchAfterRelease(ctx, tx, assignment); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -679,6 +683,16 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 // The first read only discovers immutable IDs; all business checks happen after
 // Order -> Assignment -> Driver -> Vehicle have been locked and re-read.
 func (s *OrderService) lockAssignmentContext(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*models.Order, *models.Assignment, *models.Driver, *models.Vehicle, error) {
+	return s.lockAssignmentContextWithWait(ctx, tx, id, true)
+}
+
+func (s *OrderService) lockAssignmentContextWithWait(ctx context.Context, tx pgx.Tx, id uuid.UUID, wait bool) (*models.Order, *models.Assignment, *models.Driver, *models.Vehicle, error) {
+	lock := func(sb *sqlbuilder.SelectBuilder) {
+		sb.ForUpdate()
+		if !wait {
+			sb.SQL("NOWAIT")
+		}
+	}
 	seed, err := storage.GetOne[models.Assignment](ctx, tx, "assignments", func(sb *sqlbuilder.SelectBuilder) {
 		sb.Where(sb.EQ("id", id))
 	})
@@ -686,13 +700,15 @@ func (s *OrderService) lockAssignmentContext(ctx context.Context, tx pgx.Tx, id 
 		return nil, nil, nil, nil, err
 	}
 	order, err := storage.GetOne[models.Order](ctx, tx, "orders", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", seed.OrderID)).ForUpdate()
+		sb.Where(sb.EQ("id", seed.OrderID))
+		lock(sb)
 	})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 	assignment, err := storage.GetOne[models.Assignment](ctx, tx, "assignments", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", id)).ForUpdate()
+		sb.Where(sb.EQ("id", id))
+		lock(sb)
 	})
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -701,15 +717,23 @@ func (s *OrderService) lockAssignmentContext(ctx context.Context, tx pgx.Tx, id 
 		return nil, nil, nil, nil, ErrAssignmentStale
 	}
 	driver, err := storage.GetOne[models.Driver](ctx, tx, "drivers", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", assignment.DriverID)).ForUpdate()
+		sb.Where(sb.EQ("id", assignment.DriverID))
+		lock(sb)
 	})
 	if err != nil {
+		if assignmentLockBusy(err) {
+			return nil, nil, nil, nil, err
+		}
 		return nil, nil, nil, nil, ErrDriverNotEligible
 	}
 	vehicle, err := storage.GetOne[models.Vehicle](ctx, tx, "vehicles", func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("id", assignment.VehicleID)).ForUpdate()
+		sb.Where(sb.EQ("id", assignment.VehicleID))
+		lock(sb)
 	})
 	if err != nil {
+		if assignmentLockBusy(err) {
+			return nil, nil, nil, nil, err
+		}
 		return nil, nil, nil, nil, ErrVehicleNotOperational
 	}
 	return order, assignment, driver, vehicle, nil
@@ -727,34 +751,7 @@ func (s *OrderService) expireStaleAssignments(ctx context.Context, orderID, driv
 	if err != nil {
 		return err
 	}
-	for _, candidate := range stale {
-		tx, err := s.db.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		_, assignment, _, _, err := s.lockAssignmentContext(ctx, tx, candidate.ID)
-		if err != nil {
-			tx.Rollback(ctx) //nolint:errcheck
-			return err
-		}
-		if assignment.Status == models.AssignmentPendingAcceptance && !now.Before(assignment.OfferExpiresAt) {
-			assignment.Status = models.AssignmentExpired
-			if err := storage.Update(ctx, "assignments", *assignment, tx, func(ub *sqlbuilder.UpdateBuilder) {
-				ub.Where(ub.EQ("id", assignment.ID))
-			}); err != nil {
-				tx.Rollback(ctx) //nolint:errcheck
-				return err
-			}
-			if err := s.notify(ctx, tx, assignment.CreatedByUserID, "Предложение истекло", fmt.Sprintf("Назначение %s по заказу %s не принято вовремя", assignment.ID, assignment.OrderID)); err != nil {
-				tx.Rollback(ctx)
-				return err
-			}
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.expireAssignments(ctx, stale)
 }
 
 func (s *OrderService) validateAssignmentResources(ctx context.Context, tx pgx.Tx, order *models.Order, driver *models.Driver, vehicle *models.Vehicle, from, to time.Time) error {

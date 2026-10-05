@@ -36,7 +36,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	}
 	defer pool.Close()
 
-	if _, err := pool.Exec(ctx, `TRUNCATE integration_outbox, integration_inbox, order_status_history, assignments, routes, notifications, orders, driver_shifts, driver_documents, vehicle_documents, drivers, managers, warehouses, vehicles, users CASCADE`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE dispatch_release_queue, integration_outbox, integration_inbox, order_status_history, assignments, routes, notifications, orders, driver_shifts, driver_documents, vehicle_documents, drivers, managers, warehouses, vehicles, users CASCADE`); err != nil {
 		t.Fatalf("truncate test data: %v", err)
 	}
 
@@ -400,6 +400,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, clientID, warehouseID uuid.UUID, from, to time.Time) models.Order {
 	t.Helper()
 	price := 1000.0
+	submittedAt := time.Now()
 	order := models.Order{
 		ID:                 uuid.New(),
 		CreatedByID:        &clientID,
@@ -410,6 +411,7 @@ func createReadyOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 		WeightKg:           100,
 		VolumeM3:           2,
 		Status:             models.OrderReadyForDispatch,
+		SubmittedAt:        &submittedAt,
 		TotalPrice:         &price,
 		PickupFrom:         &from,
 		PickupTo:           &to,
