@@ -13,6 +13,7 @@ import (
 	"github.com/anxi0uz/logiflow/internal/database"
 	"github.com/anxi0uz/logiflow/internal/events"
 	"github.com/anxi0uz/logiflow/internal/handler"
+	"github.com/anxi0uz/logiflow/internal/services"
 	"github.com/golang-cz/devslog"
 )
 
@@ -68,6 +69,17 @@ func main() {
 		os.Exit(1)
 	}
 	go events.Run(ctx, connectionPool, cfg.NATS.Addr)
+	backgroundOrders := services.NewOrderService(connectionPool, *cfg)
+	expiryDone := make(chan struct{})
+	go func() {
+		defer close(expiryDone)
+		backgroundOrders.RunAssignmentExpiry(ctx)
+	}()
+	refreshDone := make(chan struct{})
+	go func() {
+		defer close(refreshDone)
+		backgroundOrders.RunDispatchRefresh(ctx)
+	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -90,5 +102,7 @@ func main() {
 		slog.Error("Ошибка при остановке сервера", "error", err.Error())
 	}
 
+	<-expiryDone
+	<-refreshDone
 	slog.Info("Приложение остановлено")
 }

@@ -266,11 +266,21 @@ def test_order_flow_and_concurrent_reservation():
             ]["status"]
             == "ready_for_dispatch"
         )
-        refreshed = call(
-            "POST",
-            f"/api/v1/orders/{order_id}/dispatch-recommendations",
-            tokens["manager1"],
-        )["data"]["success"]
+        before_release = refreshed["createdAt"]
+        for _ in range(60):
+            refreshed = call(
+                "GET",
+                f"/api/v1/orders/{order_id}/dispatch-recommendations",
+                tokens["manager1"],
+            )["data"]["success"]
+            if (
+                refreshed["status"] == "ready"
+                and refreshed["createdAt"] != before_release
+            ):
+                break
+            time.sleep(0.2)
+        assert refreshed["status"] == "ready"
+        assert refreshed["createdAt"] != before_release
         candidate = next(
             c
             for c in refreshed["candidates"]
