@@ -163,10 +163,8 @@ func (s *OrderService) CreateWarehouseOperation(ctx context.Context, orderID, us
 		}
 		return nil, err
 	}
-	if kind != "receive" {
-		if err = s.recordWarehouseDiscrepancy(ctx, tx, order, &operation); err != nil {
-			return nil, err
-		}
+	if err = s.recordWarehouseDiscrepancy(ctx, tx, order, &operation); err != nil {
+		return nil, err
 	}
 	if kind == "undo_load" {
 		if err = s.undoWarehouseLoading(ctx, tx, order, assignment, userID, operation.OccurredAt); err != nil {

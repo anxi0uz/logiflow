@@ -5,6 +5,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 
+class DocumentField(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+    value: str = Field(max_length=20000)
+
+
 class DeliveryCompleted(BaseModel):
     event_id: UUID
     order_id: UUID
@@ -17,6 +22,7 @@ class DeliveryCompleted(BaseModel):
     total_price: float | None = Field(default=None, ge=0)
     delivered_at: datetime
     recipient_name: str | None = None
+    fields: list[DocumentField] = Field(default_factory=list, max_length=200)
     driver_id: UUID
     vehicle_id: UUID
 
@@ -34,11 +40,6 @@ class DocumentReady(BaseModel):
     order_id: UUID
     user_id: UUID
     type: str
-
-
-class DocumentField(BaseModel):
-    label: str = Field(min_length=1, max_length=200)
-    value: str = Field(max_length=20000)
 
 
 class DocumentRequested(BaseModel):

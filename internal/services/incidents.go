@@ -253,6 +253,15 @@ func (s *OrderService) recordWarehouseDiscrepancy(ctx context.Context, tx pgx.Tx
 	var expected int
 	var err error
 	switch op.OperationType {
+	case "receive":
+		details, readErr := readTransportDetails(order)
+		if readErr != nil {
+			return readErr
+		}
+		if details == nil {
+			return nil
+		}
+		expected = details.PackageCount
 	case "undo_load":
 		err = tx.QueryRow(ctx, `SELECT package_count FROM warehouse_operations WHERE order_id=$1 AND assignment_id=$2 AND operation_type='load'`, order.ID, *op.AssignmentID).Scan(&expected)
 	case "load", "return_to_sender":

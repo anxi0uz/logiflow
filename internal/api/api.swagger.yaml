@@ -443,6 +443,8 @@ components:
     Order:
       type: object
       properties:
+        transportPolicyVersion: { type: integer, description: 0 для прежнего порядка; 1 требует реквизиты перед submit и приёмку перед complete. }
+        transportDetails: { $ref: "#/components/schemas/TransportDetails" }
         id:
           type: string
           format: uuid
@@ -505,6 +507,77 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    CounterpartyWrite:
+      type: object
+      required: [kind, name, address, contactName]
+      properties:
+        kind: { type: string, enum: [organization, entrepreneur, individual] }
+        name: { type: string, minLength: 1, maxLength: 300 }
+        inn: { type: string, maxLength: 12 }
+        kpp: { type: string, maxLength: 9 }
+        address: { type: string, minLength: 1, maxLength: 1000 }
+        contactName: { type: string, minLength: 1, maxLength: 200 }
+        phone: { type: string, maxLength: 40 }
+        email: { type: string, maxLength: 254 }
+        shared: { type: boolean, description: Только admin может публиковать запись в общем каталоге. }
+        status: { type: string, enum: [active, archived] }
+    Counterparty:
+      allOf:
+        - $ref: "#/components/schemas/CounterpartyWrite"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            ownerUserId: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    TransportDetailsWrite:
+      type: object
+      required: [senderId, recipientId, carrierId, basisType, basisNumber, basisDate, packageCount]
+      properties:
+        senderId: { type: string, format: uuid }
+        recipientId: { type: string, format: uuid }
+        carrierId: { type: string, format: uuid }
+        basisType: { type: string, enum: [contract, transport_request] }
+        basisNumber: { type: string, minLength: 1, maxLength: 100 }
+        basisDate: { type: string, format: date }
+        packageCount: { type: integer, minimum: 1 }
+        terms: { type: string, maxLength: 2000 }
+    TransportDetails:
+      type: object
+      properties:
+        sender: { $ref: "#/components/schemas/Counterparty" }
+        recipient: { $ref: "#/components/schemas/Counterparty" }
+        carrier: { $ref: "#/components/schemas/Counterparty" }
+        basisType: { type: string }
+        basisNumber: { type: string }
+        basisDate: { type: string, format: date }
+        packageCount: { type: integer }
+        terms: { type: string }
+        recordedByUserId: { type: string, format: uuid }
+        recordedAt: { type: string, format: date-time }
+    DeliveryReceiptCreate:
+      type: object
+      required: [assignmentId, recipientName, recipientRole, authorityBasis, packageCount, cargoCondition]
+      properties:
+        assignmentId: { type: string, format: uuid }
+        recipientName: { type: string, minLength: 1, maxLength: 200 }
+        recipientRole: { type: string, minLength: 1, maxLength: 200 }
+        authorityBasis: { type: string, minLength: 1, maxLength: 1000, description: Основание приёмки со слов подтверждающего; система не проверяет доверенность или подпись. }
+        packageCount: { type: integer, minimum: 0 }
+        cargoCondition: { type: string, minLength: 1, maxLength: 2000 }
+        sealNumber: { type: string, maxLength: 100 }
+        comment: { type: string, maxLength: 2000 }
+        receivedAt: { type: string, format: date-time, description: Не раньше arrive и не более чем на 5 минут в будущем; по умолчанию время сервера. }
+    DeliveryReceipt:
+      allOf:
+        - $ref: "#/components/schemas/DeliveryReceiptCreate"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            orderId: { type: string, format: uuid }
+            recordedAt: { type: string, format: date-time }
+            recordedByUserId: { type: string, format: uuid }
 
     OrderCreate:
       type: object
@@ -697,6 +770,7 @@ components:
 
     DeliveryComplete:
       type: object
+      description: Для transportPolicyVersion=1 требуется предварительная delivery-receipt; имя берётся из неё. Поля здесь сохраняются для старых клиентов, противоречащее приёмке имя отклоняется.
       properties:
         recipientName:
           type: string
@@ -1530,6 +1604,96 @@ paths:
       responses:
         "200": { description: Черновик обновлён }
         "409": { description: Заказ уже отправлен }
+
+  /api/v1/counterparties:
+    get:
+      operationId: listCounterparties
+      tags: [Orders]
+      summary: Свой каталог контрагентов и общие записи admin
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0, maximum: 10000 } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200": { description: Каталог контрагентов }
+        "403": { description: Роль не допускает чтение каталога }
+    post:
+      operationId: createCounterparty
+      tags: [Orders]
+      summary: Создать контрагента в своём каталоге
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CounterpartyWrite" }
+      responses:
+        "201": { description: Контрагент создан }
+        "422": { description: Некорректные реквизиты }
+  /api/v1/counterparties/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getCounterparty
+      tags: [Orders]
+      summary: Получить доступного контрагента
+      responses:
+        "200": { description: Контрагент }
+        "404": { description: Запись не найдена или недоступна }
+    put:
+      operationId: updateCounterparty
+      tags: [Orders]
+      summary: Заменить реквизиты или архивировать контрагента; снимки заказов сохраняются
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CounterpartyWrite" }
+      responses:
+        "200": { description: Контрагент обновлён }
+        "404": { description: Запись не принадлежит пользователю }
+        "422": { description: Некорректные реквизиты }
+  /api/v1/orders/{id}/transport-details:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: setTransportDetails
+      tags: [Orders]
+      summary: Сохранить снимок сторон и основания перевозки в черновике
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransportDetailsWrite" }
+      responses:
+        "200": { description: Заказ со снимком реквизитов }
+        "403": { description: Недоступен заказ или контрагент }
+        "409": { description: Заказ уже отправлен или контрагент архивирован }
+        "422": { description: Некорректное основание перевозки }
+  /api/v1/orders/{id}/delivery-receipt:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getDeliveryReceipt
+      tags: [Orders]
+      summary: Посмотреть неизменяемую запись фактической приёмки
+      responses:
+        "200": { description: Приёмка }
+        "404": { description: Приёмка ещё не зарегистрирована }
+    post:
+      operationId: createDeliveryReceipt
+      tags: [Orders]
+      summary: Зафиксировать фактическую приёмку после arrive
+      description: Водитель для адресной доставки; менеджер назначения для складской; admin. Расхождение количества создаёт проблему, complete остаётся отдельной командой.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliveryReceiptCreate" }
+      responses:
+        "201": { description: Приёмка сохранена }
+        "403": { description: Нет права подтверждения }
+        "409": { description: Неподходящий этап или приёмка уже сохранена }
+        "422": { description: Некорректные данные или количество отличается от складской разгрузки }
 
   /api/v1/orders/{id}/submit:
     post:

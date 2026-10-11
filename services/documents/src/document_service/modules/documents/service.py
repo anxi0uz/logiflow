@@ -53,7 +53,20 @@ def render_delivery_confirmation(event: DeliveryCompleted, font_path: str) -> by
         pdf.drawString(x, y, text.upper())
 
     def lines(value: str, available: float) -> list[str]:
-        return simpleSplit(value, "LogiflowBody", 10.5, available) or [""]
+        wrapped = []
+        for line in simpleSplit(value, "LogiflowBody", 10.5, available) or [""]:
+            chunk = ""
+            for character in line:
+                if (
+                    chunk
+                    and pdfmetrics.stringWidth(chunk + character, "LogiflowBody", 10.5)
+                    > available
+                ):
+                    wrapped.append(chunk)
+                    chunk = ""
+                chunk += character
+            wrapped.append(chunk)
+        return wrapped
 
     def field(text: str, value: str, x: float, y: float, available: float) -> float:
         label(text, x, y)
@@ -157,6 +170,19 @@ def render_delivery_confirmation(event: DeliveryCompleted, font_path: str) -> by
     for title, value in details:
         y = ensure_room(y, len(lines(value, right - left)) * 19 + 37)
         y = field(title, value, left, y, right - left) - 13
+
+    for extra in event.fields:
+        y = ensure_room(y, 55)
+        label(extra.label, left, y)
+        for line in lines(extra.value, right - left):
+            if y - 19 < 62:
+                y = ensure_room(y, 19)
+                label(extra.label + " (продолжение)", left, y)
+            y -= 19
+            pdf.setFillColor(ink)
+            pdf.setFont("LogiflowBody", 10.5)
+            pdf.drawString(left, y, line)
+        y -= 24
 
     pdf.save()
     return output.getvalue()

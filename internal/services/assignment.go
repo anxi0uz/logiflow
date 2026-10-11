@@ -58,6 +58,9 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 	if order.TotalPrice == nil || route.DistanceKm == nil || route.DurationSec == nil || len(route.Coordinates) == 0 {
 		return nil, ErrInvalidOrderInput
 	}
+	if order.TransportPolicyVersion == 1 && len(order.TransportDetails) == 0 {
+		return nil, ErrTransportDetailsRequired
+	}
 
 	now := time.Now()
 	from := order.Status
@@ -675,6 +678,28 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 			return nil, err
 		}
 	}
+	receipt, err := storage.GetOne[models.DeliveryReceipt](ctx, tx, "delivery_receipts", func(b *sqlbuilder.SelectBuilder) { b.Where(b.EQ("order_id", order.ID)) })
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	if receipt == nil && order.TransportPolicyVersion == 1 {
+		return nil, ErrDeliveryReceiptRequired
+	}
+	if receipt != nil {
+		if receipt.AssignmentID != assignment.ID {
+			return nil, ErrAssignmentStale
+		}
+		if req.RecipientName != nil && stringValue(req.RecipientName) != receipt.RecipientName {
+			return nil, ErrInvalidOrderInput
+		}
+		req.RecipientName = &receipt.RecipientName
+		if req.Comment == nil {
+			req.Comment = &receipt.Comment
+		}
+	}
+	if !boundedText(stringValue(req.RecipientName), 0, 200) || !boundedText(stringValue(req.Comment), 0, 2000) {
+		return nil, ErrInvalidOrderInput
+	}
 	now := time.Now()
 	assignment.Status = models.AssignmentCompleted
 	assignment.CompletedAt = &now
@@ -706,12 +731,17 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 			}
 		}
 		eventID := uuid.New()
+		transportFields, err := transportDocumentFields(order, receipt)
+		if err != nil {
+			return nil, err
+		}
 		payload, err := json.Marshal(events.DeliveryCompleted{
 			EventID: eventID, OrderID: order.ID, UserID: *order.CreatedByID,
 			OriginAddress: origin, DestinationAddress: order.DestinationAddress,
 			CargoDescription: order.CargoDescription, WeightKg: order.WeightKg,
 			VolumeM3: order.VolumeM3, TotalPrice: order.TotalPrice, DeliveredAt: now,
 			RecipientName: assignment.RecipientName, DriverID: driver.ID, VehicleID: vehicle.ID,
+			Fields: transportFields,
 		})
 		if err != nil {
 			return nil, err

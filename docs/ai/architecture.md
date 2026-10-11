@@ -18,6 +18,13 @@ Order, Assignment и Fleet разделены логически, но изме�
 находятся `order_incidents`: автоматическое расхождение атомарно с операцией склада,
 решение проблемы и удержание load/start/complete используют ту же блокировку Order.
 
+`counterparties` хранит собственный/общий каталог. `orders.transport_details` —
+JSON-снимок сторон и основания, зафиксированный до submit; изменение каталога
+его не переписывает. `transport_policy_version` сохраняет прежнюю процедуру для
+старых заказов. `delivery_receipts` хранит единственную фактическую приёмку:
+её запись и автоматическая проблема количества атомарны под блокировкой Order.
+Приёмка сама не освобождает бронирование. Правила — `transport-accounting.md`.
+
 ## Dispatch
 
 `services/dispatch/`, Python; приватный gRPC 50052. Своей БД нет.
@@ -43,7 +50,7 @@ SQL фильтрует документы, смены, вместимость и
 | --- | --- | --- |
 | `dispatch.requested.v1` | Core → Dispatch | ID заказа, submitted_at, requested_at; чтение после commit |
 | `dispatch.recommended.v1` | Dispatch → Core | Ранжированные пары; защита от устаревшего результата |
-| `delivery.completed.v1` | Core → Documents | Неизменяемый снимок доставки |
+| `delivery.completed.v1` | Core → Documents | Неизменяемый снимок доставки; optional fields для сторон и приёмки |
 | `document.requested.v1` | Core → Documents | Тип, reference_id, поля снимка, получатели остальных внутренних документов |
 | `document.ready.v1` | Documents → Core | Ссылка на документ для уведомления |
 | `invalid.events.v1` | обработчики → diagnostic stream | Невалидные события и исходные bytes |
