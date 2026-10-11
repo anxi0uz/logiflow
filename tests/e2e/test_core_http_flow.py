@@ -10,7 +10,7 @@ Run with:
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Barrier
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -46,7 +46,7 @@ def test_order_flow_and_concurrent_reservation():
     warehouse_ids = [uuid4(), uuid4()]
     vehicle_id = uuid4()
     driver_ids = [uuid4(), uuid4()]
-    manager_ids = [uuid4(), uuid4()]
+    manager_ids = [uuid4(), uuid4(), uuid4()]
 
     def call(method, path, token=None, body=None, expected=200):
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -58,7 +58,15 @@ def test_order_flow_and_concurrent_reservation():
 
     try:
         call("GET", "/health/ready")
-        for name in ("client", "manager1", "manager2", "driver1", "driver2"):
+        for name in (
+            "client",
+            "admin",
+            "manager1",
+            "manager2",
+            "manager3",
+            "driver1",
+            "driver2",
+        ):
             email = f"{name}-{suffix}@e2e.test"
             call(
                 "POST",
@@ -73,7 +81,9 @@ def test_order_flow_and_concurrent_reservation():
                 "SELECT id FROM users WHERE email = %s", (email,)
             ).fetchone()[0]
             role = (
-                "manager"
+                "admin"
+                if name == "admin"
+                else "manager"
                 if name.startswith("manager")
                 else "driver"
                 if name.startswith("driver")
@@ -86,8 +96,8 @@ def test_order_flow_and_concurrent_reservation():
         for i, warehouse_id in enumerate(warehouse_ids):
             lat, lon = (60.1699, 24.9384) if i == 0 else (60.2055, 24.9839)
             db.execute(
-                "INSERT INTO warehouses(id, slug, name, address, city, latitude, longitude) "
-                "VALUES (%s, %s, %s, %s, 'Helsinki', %s, %s)",
+                "INSERT INTO warehouses(id, slug, name, address, city, latitude, longitude, status) "
+                "VALUES (%s, %s, %s, %s, 'Helsinki', %s, %s, 'active')",
                 (
                     warehouse_id,
                     f"e2e-{suffix}-{i}",
@@ -103,7 +113,7 @@ def test_order_flow_and_concurrent_reservation():
                 (
                     manager_id,
                     user_ids[f"manager{i + 1}"],
-                    warehouse_ids[0],
+                    warehouse_ids[1] if i == 2 else warehouse_ids[0],
                     f"e2e-manager-{suffix}-{i}",
                 ),
             )
@@ -119,7 +129,7 @@ def test_order_flow_and_concurrent_reservation():
                 uuid4(),
                 vehicle_id,
                 f"REG-{suffix}",
-                (datetime.now(timezone.utc) + timedelta(days=365)).date(),
+                (datetime.now(UTC) + timedelta(days=365)).date(),
             ),
         )
         for i, driver_id in enumerate(driver_ids):
@@ -130,7 +140,7 @@ def test_order_flow_and_concurrent_reservation():
                     driver_id,
                     user_ids[f"driver{i + 1}"],
                     f"LICENSE-{suffix}-{i}",
-                    (datetime.now(timezone.utc) + timedelta(days=365)).date(),
+                    (datetime.now(UTC) + timedelta(days=365)).date(),
                     f"e2e-driver-{suffix}-{i}",
                 ),
             )
@@ -147,7 +157,7 @@ def test_order_flow_and_concurrent_reservation():
             )
             tokens[name] = login["data"]["auth"]["access_token"]
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         def create_and_submit(hours):
             start = now + timedelta(hours=hours)
@@ -180,10 +190,41 @@ def test_order_flow_and_concurrent_reservation():
                 },
             )["data"]["order"]
             assert edited["totalPrice"] > order["totalPrice"]
+            assert order["destinationWarehouseId"] == str(warehouse_ids[1])
+            assert order["originAddress"] == "Test address 0"
+            assert order["destinationAddress"] == "Test address 1"
             call("POST", f"/api/v1/orders/{order_id}/submit", tokens["client"])
+            receipt = {
+                "operationType": "receive",
+                "packageCount": 5,
+                "cargoCondition": "Упаковка цела",
+            }
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/warehouse-operations",
+                tokens["client"],
+                receipt,
+                403,
+            )
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/warehouse-operations",
+                tokens["manager3"],
+                receipt,
+                403,
+            )
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/warehouse-operations",
+                tokens["manager1"],
+                receipt,
+                201,
+            )
             return order_id, start, end
 
-        def propose(order_id, start, end, driver_id, manager="manager1", recommendation=None):
+        def propose(
+            order_id, start, end, driver_id, manager="manager1", recommendation=None
+        ):
             body = {
                 "driverId": str(driver_id),
                 "vehicleId": str(vehicle_id),
@@ -303,6 +344,58 @@ def test_order_flow_and_concurrent_reservation():
             expected=409,
         )
 
+        call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/start",
+            tokens["driver2"],
+            expected=409,
+        )
+        loading = {
+            "operationType": "load",
+            "assignmentId": second["id"],
+            "packageCount": 5,
+            "cargoCondition": "Погружено без замечаний",
+        }
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/warehouse-operations",
+            tokens["driver2"],
+            loading,
+            403,
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/warehouse-operations",
+            tokens["manager1"],
+            loading,
+            201,
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/warehouse-operations",
+            tokens["manager1"],
+            loading,
+            409,
+        )
+        queue = call(
+            "GET", f"/api/v1/warehouses/{warehouse_ids[0]}/orders", tokens["manager1"]
+        )["data"]["orders"]
+        assert (
+            next(item for item in queue if item["id"] == order_id)["warehouseStage"]
+            == "ready_to_depart"
+        )
+        call(
+            "GET",
+            f"/api/v1/warehouses/{warehouse_ids[0]}/orders",
+            tokens["manager3"],
+            expected=403,
+        )
+        call("DELETE", f"/warehouses/e2e-{suffix}-0", tokens["manager1"], expected=403)
+        blocked_delete = call(
+            "DELETE", f"/warehouses/e2e-{suffix}-0", tokens["admin"], expected=409
+        )
+        assert blocked_delete["data"]["error"] == "WAREHOUSE_IN_USE"
+
         assert (
             call(
                 "POST", f"/api/v1/assignments/{second['id']}/start", tokens["driver2"]
@@ -318,11 +411,217 @@ def test_order_flow_and_concurrent_reservation():
             tokens["driver1"],
             expected=403,
         )
+        # Two recorded in-transit handovers; neither changes the order lifecycle.
+        started_at = call("GET", f"/api/v1/orders/{order_id}", tokens["client"])[
+            "data"
+        ]["success"]["startedAt"]
+        previous = second["id"]
+        for outgoing, incoming, driver_index in (
+            ("driver2", "driver1", 0),
+            ("driver1", "driver2", 1),
+        ):
+            handover_body = {
+                "driverId": str(driver_ids[driver_index]),
+                "vehicleId": str(vehicle_id),
+                "plannedTo": end.isoformat(),
+                "reason": "Смена водителя для продолжения рейса",
+                "location": "Площадка отдыха, тестовый адрес",
+                "cargoCondition": "Упаковка целая, замечаний нет",
+            }
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/handovers",
+                tokens["client"],
+                handover_body,
+                expected=403,
+            )
+            handover = call(
+                "POST",
+                f"/api/v1/orders/{order_id}/handovers",
+                tokens["manager1"],
+                handover_body,
+                expected=201,
+            )["data"]["handover"]
+            hid = handover["id"]
+            call("GET", f"/api/v1/orders/{order_id}/handovers", tokens[incoming])
+            call(
+                "POST",
+                f"/api/v1/handovers/{hid}/accept",
+                tokens[incoming],
+                expected=409,
+            )
+            call(
+                "POST",
+                f"/api/v1/handovers/{hid}/confirm-release",
+                tokens[incoming],
+                expected=403,
+            )
+            call("POST", f"/api/v1/handovers/{hid}/confirm-release", tokens[outgoing])
+            call(
+                "POST",
+                f"/api/v1/handovers/{hid}/accept",
+                tokens["manager1"],
+                expected=403,
+            )
+            handed = call("POST", f"/api/v1/handovers/{hid}/accept", tokens[incoming])[
+                "data"
+            ]["handover"]
+            assert handed["status"] == "completed"
+            call(
+                "POST",
+                f"/api/v1/handovers/{hid}/accept",
+                tokens[incoming],
+                expected=409,
+            )
+            call(
+                "POST",
+                f"/api/v1/assignments/{previous}/arrive",
+                tokens[outgoing],
+                expected=409,
+            )
+            assert (
+                db.execute(
+                    "SELECT status FROM assignments WHERE id=%s", (previous,)
+                ).fetchone()[0]
+                == "released"
+            )
+            current = call("GET", f"/api/v1/orders/{order_id}", tokens["client"])[
+                "data"
+            ]["success"]
+            assert (
+                current["status"] == "in_transit" and current["startedAt"] == started_at
+            )
+            previous = handed["nextAssignmentId"]
+        history = call(
+            "GET", f"/api/v1/orders/{order_id}/handovers", tokens["manager1"]
+        )["data"]["handovers"]
+        assert len(history) == 2
+        for endpoint in ("/me/trips", "/api/v1/orders"):
+            former_trips = call("GET", endpoint, tokens["driver1"])["data"]["success"]
+            assert any(item["id"] == order_id for item in former_trips)
+        second = {**second, "id": previous}
         call("POST", f"/api/v1/assignments/{second['id']}/arrive", tokens["driver2"])
-        completed = call(
+        incoming = call("GET", f"/api/v1/orders/{order_id}", tokens["manager3"])[
+            "data"
+        ]["success"]
+        assert incoming["status"] == "arrived"
+        queue = call(
+            "GET", f"/api/v1/warehouses/{warehouse_ids[1]}/orders", tokens["manager3"]
+        )["data"]["orders"]
+        assert (
+            next(item for item in queue if item["id"] == order_id)["warehouseStage"]
+            == "awaiting_unloading"
+        )
+        call(
             "POST",
             f"/api/v1/assignments/{second['id']}/complete",
             tokens["driver2"],
+            expected=403,
+        )
+        call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/complete",
+            tokens["manager1"],
+            expected=403,
+        )
+        call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/complete",
+            tokens["manager3"],
+            expected=409,
+        )
+        refusal = call(
+            "POST",
+            f"/api/v1/orders/{order_id}/incidents",
+            tokens["driver2"],
+            {
+                "kind": "recipient_refusal",
+                "description": "Получатель отказался от приёмки",
+            },
+            201,
+        )["data"]["incident"]
+        acceptance = {
+            "resolution": "recipient_accepted",
+            "note": "После согласования получатель согласился принять груз с замечаниями",
+            "recipientName": "Recipient",
+        }
+        for name in ("client", "driver2", "manager1"):
+            call(
+                "POST",
+                f"/api/v1/incidents/{refusal['id']}/resolve",
+                tokens[name],
+                acceptance,
+                403,
+            )
+        call(
+            "POST",
+            f"/api/v1/incidents/{refusal['id']}/resolve",
+            tokens["manager3"],
+            acceptance,
+            409,
+        )
+        unloading = {
+            "operationType": "unload",
+            "assignmentId": second["id"],
+            "packageCount": 4,
+            "cargoCondition": "Принято с недостачей одного места",
+        }
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/warehouse-operations",
+            tokens["manager3"],
+            unloading,
+            201,
+        )
+        journal = call(
+            "GET", f"/api/v1/orders/{order_id}/warehouse-operations", tokens["client"]
+        )["data"]["operations"]
+        assert [item["operationType"] for item in journal] == [
+            "receive",
+            "load",
+            "unload",
+        ]
+        incidents = call(
+            "GET", f"/api/v1/orders/{order_id}/incidents", tokens["client"]
+        )["data"]["incidents"]
+        assert len(incidents) == 2
+        shortage = next(
+            item for item in incidents if item["kind"] == "quantity_discrepancy"
+        )
+        assert (shortage["expectedPackages"], shortage["actualPackages"]) == (5, 4)
+        blocked = call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/complete",
+            tokens["manager3"],
+            expected=409,
+        )
+        assert "INCIDENT_OPEN" in str(blocked)
+        queue = call(
+            "GET", f"/api/v1/warehouses/{warehouse_ids[1]}/orders", tokens["manager3"]
+        )["data"]["orders"]
+        held = next(item for item in queue if item["id"] == order_id)
+        assert (
+            held["warehouseStage"] == "incident_open" and held["openIncidentCount"] == 2
+        )
+        call(
+            "POST",
+            f"/api/v1/incidents/{refusal['id']}/resolve",
+            tokens["manager3"],
+            acceptance,
+        )
+        call(
+            "POST",
+            f"/api/v1/incidents/{shortage['id']}/resolve",
+            tokens["manager3"],
+            {
+                "resolution": "accept_discrepancy",
+                "note": "Недостача зафиксирована, претензия передана ответственному",
+            },
+        )
+        completed = call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/complete",
+            tokens["manager3"],
             {
                 "recipientName": "Recipient",
                 "comment": "Received",
@@ -350,8 +649,21 @@ def test_order_flow_and_concurrent_reservation():
             document = None
             deadline = time.monotonic() + 15
             while time.monotonic() < deadline:
-                inbox = call("GET", "/api/v1/documents", tokens["client"])["data"]["success"] or []
-                document = next((item for item in inbox if item["order_id"] == order_id), None)
+                inbox = (
+                    call("GET", "/api/v1/documents", tokens["client"])["data"][
+                        "success"
+                    ]
+                    or []
+                )
+                document = next(
+                    (
+                        item
+                        for item in inbox
+                        if item["order_id"] == order_id
+                        and item["type"] == "delivery_confirmation"
+                    ),
+                    None,
+                )
                 if document:
                     break
                 time.sleep(0.25)
@@ -374,12 +686,60 @@ def test_order_flow_and_concurrent_reservation():
             linked_notice = False
             deadline = time.monotonic() + 15
             while time.monotonic() < deadline:
-                notices = call("GET", "/notifications", tokens["client"])["data"]["success"] or []
-                linked_notice = any(item["DocumentID"] == document_id for item in notices)
+                notices = (
+                    call("GET", "/notifications", tokens["client"])["data"]["success"]
+                    or []
+                )
+                linked_notice = any(
+                    item["DocumentID"] == document_id for item in notices
+                )
                 if linked_notice:
                     break
                 time.sleep(0.25)
             assert linked_notice, "document notification was not delivered"
+
+            expected_types = {
+                "transport_order",
+                "trip_assignment",
+                "cargo_handover",
+                "delivery_confirmation",
+                "service_report",
+            }
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                issued = (
+                    call("GET", "/api/v1/documents?limit=100", tokens["client"])[
+                        "data"
+                    ]["success"]
+                    or []
+                )
+                issued = [item for item in issued if item["order_id"] == order_id]
+                if {item["type"] for item in issued} >= expected_types and sum(
+                    item["type"] == "cargo_handover" for item in issued
+                ) == 2:
+                    break
+                time.sleep(0.25)
+            assert {item["type"] for item in issued} >= expected_types
+            assert sum(item["type"] == "cargo_handover" for item in issued) == 2
+            assert sum(item["type"] == "trip_assignment" for item in issued) == 3
+            transfer_doc = next(
+                item for item in issued if item["type"] == "cargo_handover"
+            )
+            for role in ("driver1", "driver2", "manager1"):
+                assert (
+                    http.get(
+                        f"/api/v1/documents/{transfer_doc['id']}/download",
+                        headers={"Authorization": f"Bearer {tokens[role]}"},
+                    ).status_code
+                    == 200
+                )
+            assert (
+                http.get(
+                    f"/api/v1/documents/{transfer_doc['id']}/download",
+                    headers={"Authorization": f"Bearer {tokens['manager2']}"},
+                ).status_code
+                == 404
+            )
 
         # Cancelling an open offer releases its reservation.
         cancel_id, start, end = create_and_submit(5)
@@ -407,6 +767,157 @@ def test_order_flow_and_concurrent_reservation():
             tokens["driver1"],
             expected=409,
         )
+
+        # Cargo remains at the origin after cancellation until physically returned.
+        queue = call(
+            "GET", f"/api/v1/warehouses/{warehouse_ids[0]}/orders", tokens["manager1"]
+        )["data"]["orders"]
+        assert (
+            next(item for item in queue if item["id"] == cancel_id)["warehouseStage"]
+            == "awaiting_return"
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{cancel_id}/warehouse-operations",
+            tokens["manager1"],
+            {
+                "operationType": "return_to_sender",
+                "packageCount": 5,
+                "cargoCondition": "Упаковка цела",
+                "comment": "Выдано представителю отправителя после отмены",
+                "recipientName": "Sender",
+            },
+            201,
+        )
+        queue = call(
+            "GET", f"/api/v1/warehouses/{warehouse_ids[0]}/orders", tokens["manager1"]
+        )["data"]["orders"]
+        assert all(item["id"] != cancel_id for item in queue)
+
+        if os.getenv("LOGIFLOW_E2E_DOCUMENTS") == "1":
+            deadline = time.monotonic() + 15
+            cancelled_doc = None
+            while time.monotonic() < deadline:
+                inbox = (
+                    call("GET", "/api/v1/documents?limit=100", tokens["client"])[
+                        "data"
+                    ]["success"]
+                    or []
+                )
+                cancelled_doc = next(
+                    (
+                        item
+                        for item in inbox
+                        if item["order_id"] == cancel_id
+                        and item["type"] == "cancellation_notice"
+                    ),
+                    None,
+                )
+                if cancelled_doc:
+                    break
+                time.sleep(0.25)
+            assert cancelled_doc, "cancellation notice was not generated"
+
+        # Undoing actual loading frees the reservation and preserves both records.
+        undo_id, start, end = create_and_submit(6)
+        loaded_offer = propose(undo_id, start, end, driver_ids[0])
+        call(
+            "POST",
+            f"/api/v1/assignments/{loaded_offer['id']}/accept",
+            tokens["driver1"],
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{undo_id}/warehouse-operations",
+            tokens["manager1"],
+            {
+                "operationType": "load",
+                "assignmentId": loaded_offer["id"],
+                "packageCount": 5,
+                "cargoCondition": "Целый",
+            },
+            201,
+        )
+        breakdown = call(
+            "POST",
+            f"/api/v1/orders/{undo_id}/incidents",
+            tokens["driver1"],
+            {
+                "kind": "vehicle_breakdown",
+                "description": "Машина неисправна перед выездом",
+            },
+            201,
+        )["data"]["incident"]
+        call(
+            "POST",
+            f"/api/v1/assignments/{loaded_offer['id']}/start",
+            tokens["driver1"],
+            expected=409,
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{undo_id}/warehouse-operations",
+            tokens["manager1"],
+            {
+                "operationType": "undo_load",
+                "assignmentId": loaded_offer["id"],
+                "packageCount": 5,
+                "cargoCondition": "Целый",
+                "comment": "Груз снят с неисправной машины",
+            },
+            201,
+        )
+        assert (
+            call("GET", f"/api/v1/orders/{undo_id}", tokens["client"])["data"][
+                "success"
+            ]["status"]
+            == "ready_for_dispatch"
+        )
+        assert db.execute(
+            "SELECT status FROM assignments WHERE id=%s", (loaded_offer["id"],)
+        ).fetchone() == ("released",)
+        call(
+            "POST",
+            f"/api/v1/incidents/{breakdown['id']}/resolve",
+            tokens["manager1"],
+            {
+                "resolution": "repaired",
+                "note": "Ремонт выполнен, повторный рейс согласован",
+            },
+        )
+        retry_offer = propose(undo_id, start, end, driver_ids[0])
+        call(
+            "POST", f"/api/v1/assignments/{retry_offer['id']}/accept", tokens["driver1"]
+        )
+        call(
+            "POST",
+            f"/api/v1/assignments/{retry_offer['id']}/start",
+            tokens["driver1"],
+            expected=409,
+        )
+        call("POST", f"/api/v1/orders/{undo_id}/cancel", tokens["manager1"])
+        call(
+            "POST",
+            f"/api/v1/orders/{undo_id}/warehouse-operations",
+            tokens["manager1"],
+            {
+                "operationType": "return_to_sender",
+                "packageCount": 5,
+                "cargoCondition": "Целый",
+                "comment": "Отправитель забрал груз",
+                "recipientName": "Sender",
+            },
+            201,
+        )
+        journal = call(
+            "GET", f"/api/v1/orders/{undo_id}/warehouse-operations", tokens["client"]
+        )["data"]["operations"]
+        assert [item["operationType"] for item in journal] == [
+            "receive",
+            "load",
+            "undo_load",
+            "return_to_sender",
+        ]
 
         # Two managers, two orders, the same driver and vehicle, concurrent Assign.
         one, start, end = create_and_submit(8)
@@ -453,6 +964,11 @@ def test_order_flow_and_concurrent_reservation():
 
     finally:
         for order_id in order_ids:
+            db.execute("DELETE FROM order_incidents WHERE order_id = %s", (order_id,))
+            db.execute(
+                "DELETE FROM warehouse_operations WHERE order_id = %s", (order_id,)
+            )
+            db.execute("DELETE FROM trip_handovers WHERE order_id = %s", (order_id,))
             db.execute("DELETE FROM orders WHERE id = %s", (order_id,))
         for driver_id in driver_ids:
             db.execute("DELETE FROM drivers WHERE id = %s", (driver_id,))

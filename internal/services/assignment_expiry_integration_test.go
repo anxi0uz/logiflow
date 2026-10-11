@@ -61,7 +61,7 @@ func newExpiryFixture(t *testing.T, pool *pgxpool.Pool, day int) *expiryFixture 
 			t.Fatal(err)
 		}
 	}
-	if err := storage.Create(ctx, "warehouses", models.Warehouse{ID: f.warehouseID, Name: "Expiry", Slug: f.warehouseID.String(), Address: "Origin", City: "Test", CreatedAt: time.Now()}, pool); err != nil {
+	if err := storage.Create(ctx, "warehouses", models.Warehouse{ID: f.warehouseID, Status: "active", Name: "Expiry", Slug: f.warehouseID.String(), Address: "Origin", City: "Test", CreatedAt: time.Now()}, pool); err != nil {
 		t.Fatal(err)
 	}
 	f.driver = models.Driver{ID: uuid.New(), UserID: f.driverUserID, LicenseNumber: uuid.NewString(), LicenseExpiry: time.Now().AddDate(1, 0, 0), Rating: 5, Status: "available", Slug: uuid.NewString()}
@@ -175,6 +175,7 @@ func TestDispatchRefreshAfterReservationRelease(t *testing.T) {
 				if _, err = f.service.AcceptAssignment(ctx, f.offer.ID, f.driverUserID, "driver"); err != nil {
 					t.Fatal(err)
 				}
+				loadTestAssignment(t, f.service, f.offer, f.ownerID)
 				if _, err = f.service.StartAssignment(ctx, f.offer.ID, f.driverUserID, "driver"); err != nil {
 					t.Fatal(err)
 				}

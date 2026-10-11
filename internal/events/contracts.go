@@ -30,6 +30,22 @@ type DocumentReady struct {
 	Type       string    `json:"type"`
 }
 
+type DocumentField struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type DocumentRequested struct {
+	EventID     uuid.UUID       `json:"event_id"`
+	OrderID     uuid.UUID       `json:"order_id"`
+	UserID      uuid.UUID       `json:"user_id"`
+	ReferenceID uuid.UUID       `json:"reference_id"`
+	Type        string          `json:"type"`
+	OccurredAt  time.Time       `json:"occurred_at"`
+	Fields      []DocumentField `json:"fields"`
+	Recipients  []uuid.UUID     `json:"recipients"`
+}
+
 type DispatchRequest struct {
 	EventID     uuid.UUID `json:"event_id"`
 	OrderID     uuid.UUID `json:"order_id"`

@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -11,6 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+)
+
+const (
+	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
 // Defines values for AssignmentCreateSource.
@@ -33,13 +38,28 @@ func (e AssignmentCreateSource) Valid() bool {
 
 // Defines values for DocumentSummaryType.
 const (
+	CancellationNotice   DocumentSummaryType = "cancellation_notice"
+	CargoHandover        DocumentSummaryType = "cargo_handover"
 	DeliveryConfirmation DocumentSummaryType = "delivery_confirmation"
+	ServiceReport        DocumentSummaryType = "service_report"
+	TransportOrder       DocumentSummaryType = "transport_order"
+	TripAssignment       DocumentSummaryType = "trip_assignment"
 )
 
 // Valid indicates whether the value is a known member of the DocumentSummaryType enum.
 func (e DocumentSummaryType) Valid() bool {
 	switch e {
+	case CancellationNotice:
+		return true
+	case CargoHandover:
+		return true
 	case DeliveryConfirmation:
+		return true
+	case ServiceReport:
+		return true
+	case TransportOrder:
+		return true
+	case TripAssignment:
 		return true
 	default:
 		return false
@@ -82,6 +102,141 @@ func (e DriverUpdateStatus) Valid() bool {
 	case DriverUpdateStatusOffDuty:
 		return true
 	case DriverUpdateStatusOnRoute:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderStatus.
+const (
+	OrderStatusArrived          OrderStatus = "arrived"
+	OrderStatusAssigned         OrderStatus = "assigned"
+	OrderStatusCancelled        OrderStatus = "cancelled"
+	OrderStatusCompleted        OrderStatus = "completed"
+	OrderStatusDraft            OrderStatus = "draft"
+	OrderStatusInTransit        OrderStatus = "in_transit"
+	OrderStatusReadyForDispatch OrderStatus = "ready_for_dispatch"
+)
+
+// Valid indicates whether the value is a known member of the OrderStatus enum.
+func (e OrderStatus) Valid() bool {
+	switch e {
+	case OrderStatusArrived:
+		return true
+	case OrderStatusAssigned:
+		return true
+	case OrderStatusCancelled:
+		return true
+	case OrderStatusCompleted:
+		return true
+	case OrderStatusDraft:
+		return true
+	case OrderStatusInTransit:
+		return true
+	case OrderStatusReadyForDispatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderIncidentKind.
+const (
+	OrderIncidentKindCargoDamage         OrderIncidentKind = "cargo_damage"
+	OrderIncidentKindOther               OrderIncidentKind = "other"
+	OrderIncidentKindQuantityDiscrepancy OrderIncidentKind = "quantity_discrepancy"
+	OrderIncidentKindRecipientRefusal    OrderIncidentKind = "recipient_refusal"
+	OrderIncidentKindVehicleBreakdown    OrderIncidentKind = "vehicle_breakdown"
+)
+
+// Valid indicates whether the value is a known member of the OrderIncidentKind enum.
+func (e OrderIncidentKind) Valid() bool {
+	switch e {
+	case OrderIncidentKindCargoDamage:
+		return true
+	case OrderIncidentKindOther:
+		return true
+	case OrderIncidentKindQuantityDiscrepancy:
+		return true
+	case OrderIncidentKindRecipientRefusal:
+		return true
+	case OrderIncidentKindVehicleBreakdown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderIncidentStatus.
+const (
+	Open     OrderIncidentStatus = "open"
+	Resolved OrderIncidentStatus = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the OrderIncidentStatus enum.
+func (e OrderIncidentStatus) Valid() bool {
+	switch e {
+	case Open:
+		return true
+	case Resolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderIncidentCreateKind.
+const (
+	OrderIncidentCreateKindCargoDamage         OrderIncidentCreateKind = "cargo_damage"
+	OrderIncidentCreateKindOther               OrderIncidentCreateKind = "other"
+	OrderIncidentCreateKindQuantityDiscrepancy OrderIncidentCreateKind = "quantity_discrepancy"
+	OrderIncidentCreateKindRecipientRefusal    OrderIncidentCreateKind = "recipient_refusal"
+	OrderIncidentCreateKindVehicleBreakdown    OrderIncidentCreateKind = "vehicle_breakdown"
+)
+
+// Valid indicates whether the value is a known member of the OrderIncidentCreateKind enum.
+func (e OrderIncidentCreateKind) Valid() bool {
+	switch e {
+	case OrderIncidentCreateKindCargoDamage:
+		return true
+	case OrderIncidentCreateKindOther:
+		return true
+	case OrderIncidentCreateKindQuantityDiscrepancy:
+		return true
+	case OrderIncidentCreateKindRecipientRefusal:
+		return true
+	case OrderIncidentCreateKindVehicleBreakdown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OrderIncidentResolveResolution.
+const (
+	AcceptDiscrepancy OrderIncidentResolveResolution = "accept_discrepancy"
+	AcceptWithRemarks OrderIncidentResolveResolution = "accept_with_remarks"
+	RecipientAccepted OrderIncidentResolveResolution = "recipient_accepted"
+	Remediated        OrderIncidentResolveResolution = "remediated"
+	Repaired          OrderIncidentResolveResolution = "repaired"
+	ResourcesReplaced OrderIncidentResolveResolution = "resources_replaced"
+)
+
+// Valid indicates whether the value is a known member of the OrderIncidentResolveResolution enum.
+func (e OrderIncidentResolveResolution) Valid() bool {
+	switch e {
+	case AcceptDiscrepancy:
+		return true
+	case AcceptWithRemarks:
+		return true
+	case RecipientAccepted:
+		return true
+	case Remediated:
+		return true
+	case Repaired:
+		return true
+	case ResourcesReplaced:
 		return true
 	default:
 		return false
@@ -139,6 +294,144 @@ func (e VehicleUpdateStatus) Valid() bool {
 	case VehicleUpdateStatusInTransit:
 		return true
 	case VehicleUpdateStatusMaintenance:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WarehouseOperationOperationType.
+const (
+	WarehouseOperationOperationTypeLoad           WarehouseOperationOperationType = "load"
+	WarehouseOperationOperationTypeReceive        WarehouseOperationOperationType = "receive"
+	WarehouseOperationOperationTypeReturnToSender WarehouseOperationOperationType = "return_to_sender"
+	WarehouseOperationOperationTypeUndoLoad       WarehouseOperationOperationType = "undo_load"
+	WarehouseOperationOperationTypeUnload         WarehouseOperationOperationType = "unload"
+)
+
+// Valid indicates whether the value is a known member of the WarehouseOperationOperationType enum.
+func (e WarehouseOperationOperationType) Valid() bool {
+	switch e {
+	case WarehouseOperationOperationTypeLoad:
+		return true
+	case WarehouseOperationOperationTypeReceive:
+		return true
+	case WarehouseOperationOperationTypeReturnToSender:
+		return true
+	case WarehouseOperationOperationTypeUndoLoad:
+		return true
+	case WarehouseOperationOperationTypeUnload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WarehouseOperationCreateOperationType.
+const (
+	WarehouseOperationCreateOperationTypeLoad           WarehouseOperationCreateOperationType = "load"
+	WarehouseOperationCreateOperationTypeReceive        WarehouseOperationCreateOperationType = "receive"
+	WarehouseOperationCreateOperationTypeReturnToSender WarehouseOperationCreateOperationType = "return_to_sender"
+	WarehouseOperationCreateOperationTypeUndoLoad       WarehouseOperationCreateOperationType = "undo_load"
+	WarehouseOperationCreateOperationTypeUnload         WarehouseOperationCreateOperationType = "unload"
+)
+
+// Valid indicates whether the value is a known member of the WarehouseOperationCreateOperationType enum.
+func (e WarehouseOperationCreateOperationType) Valid() bool {
+	switch e {
+	case WarehouseOperationCreateOperationTypeLoad:
+		return true
+	case WarehouseOperationCreateOperationTypeReceive:
+		return true
+	case WarehouseOperationCreateOperationTypeReturnToSender:
+		return true
+	case WarehouseOperationCreateOperationTypeUndoLoad:
+		return true
+	case WarehouseOperationCreateOperationTypeUnload:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WarehouseQueueItemStatus.
+const (
+	WarehouseQueueItemStatusArrived          WarehouseQueueItemStatus = "arrived"
+	WarehouseQueueItemStatusAssigned         WarehouseQueueItemStatus = "assigned"
+	WarehouseQueueItemStatusCancelled        WarehouseQueueItemStatus = "cancelled"
+	WarehouseQueueItemStatusCompleted        WarehouseQueueItemStatus = "completed"
+	WarehouseQueueItemStatusDraft            WarehouseQueueItemStatus = "draft"
+	WarehouseQueueItemStatusInTransit        WarehouseQueueItemStatus = "in_transit"
+	WarehouseQueueItemStatusReadyForDispatch WarehouseQueueItemStatus = "ready_for_dispatch"
+)
+
+// Valid indicates whether the value is a known member of the WarehouseQueueItemStatus enum.
+func (e WarehouseQueueItemStatus) Valid() bool {
+	switch e {
+	case WarehouseQueueItemStatusArrived:
+		return true
+	case WarehouseQueueItemStatusAssigned:
+		return true
+	case WarehouseQueueItemStatusCancelled:
+		return true
+	case WarehouseQueueItemStatusCompleted:
+		return true
+	case WarehouseQueueItemStatusDraft:
+		return true
+	case WarehouseQueueItemStatusInTransit:
+		return true
+	case WarehouseQueueItemStatusReadyForDispatch:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WarehouseQueueItemWarehouseStage.
+const (
+	WarehouseQueueItemWarehouseStageAwaitingAssignment WarehouseQueueItemWarehouseStage = "awaiting_assignment"
+	WarehouseQueueItemWarehouseStageAwaitingLoading    WarehouseQueueItemWarehouseStage = "awaiting_loading"
+	WarehouseQueueItemWarehouseStageAwaitingReceipt    WarehouseQueueItemWarehouseStage = "awaiting_receipt"
+	WarehouseQueueItemWarehouseStageAwaitingReturn     WarehouseQueueItemWarehouseStage = "awaiting_return"
+	WarehouseQueueItemWarehouseStageAwaitingUnloading  WarehouseQueueItemWarehouseStage = "awaiting_unloading"
+	WarehouseQueueItemWarehouseStageCancelled          WarehouseQueueItemWarehouseStage = "cancelled"
+	WarehouseQueueItemWarehouseStageCompleted          WarehouseQueueItemWarehouseStage = "completed"
+	WarehouseQueueItemWarehouseStageDeparted           WarehouseQueueItemWarehouseStage = "departed"
+	WarehouseQueueItemWarehouseStageExpected           WarehouseQueueItemWarehouseStage = "expected"
+	WarehouseQueueItemWarehouseStageIncidentOpen       WarehouseQueueItemWarehouseStage = "incident_open"
+	WarehouseQueueItemWarehouseStageReadyToDepart      WarehouseQueueItemWarehouseStage = "ready_to_depart"
+	WarehouseQueueItemWarehouseStageReceived           WarehouseQueueItemWarehouseStage = "received"
+	WarehouseQueueItemWarehouseStageReturnedToSender   WarehouseQueueItemWarehouseStage = "returned_to_sender"
+)
+
+// Valid indicates whether the value is a known member of the WarehouseQueueItemWarehouseStage enum.
+func (e WarehouseQueueItemWarehouseStage) Valid() bool {
+	switch e {
+	case WarehouseQueueItemWarehouseStageAwaitingAssignment:
+		return true
+	case WarehouseQueueItemWarehouseStageAwaitingLoading:
+		return true
+	case WarehouseQueueItemWarehouseStageAwaitingReceipt:
+		return true
+	case WarehouseQueueItemWarehouseStageAwaitingReturn:
+		return true
+	case WarehouseQueueItemWarehouseStageAwaitingUnloading:
+		return true
+	case WarehouseQueueItemWarehouseStageCancelled:
+		return true
+	case WarehouseQueueItemWarehouseStageCompleted:
+		return true
+	case WarehouseQueueItemWarehouseStageDeparted:
+		return true
+	case WarehouseQueueItemWarehouseStageExpected:
+		return true
+	case WarehouseQueueItemWarehouseStageIncidentOpen:
+		return true
+	case WarehouseQueueItemWarehouseStageReadyToDepart:
+		return true
+	case WarehouseQueueItemWarehouseStageReceived:
+		return true
+	case WarehouseQueueItemWarehouseStageReturnedToSender:
 		return true
 	default:
 		return false
@@ -252,31 +545,31 @@ func (e ListDriversParamsStatus) Valid() bool {
 
 // Defines values for GetOrdersReportParamsStatus.
 const (
-	Arrived          GetOrdersReportParamsStatus = "arrived"
-	Assigned         GetOrdersReportParamsStatus = "assigned"
-	Cancelled        GetOrdersReportParamsStatus = "cancelled"
-	Completed        GetOrdersReportParamsStatus = "completed"
-	Draft            GetOrdersReportParamsStatus = "draft"
-	InTransit        GetOrdersReportParamsStatus = "in_transit"
-	ReadyForDispatch GetOrdersReportParamsStatus = "ready_for_dispatch"
+	GetOrdersReportParamsStatusArrived          GetOrdersReportParamsStatus = "arrived"
+	GetOrdersReportParamsStatusAssigned         GetOrdersReportParamsStatus = "assigned"
+	GetOrdersReportParamsStatusCancelled        GetOrdersReportParamsStatus = "cancelled"
+	GetOrdersReportParamsStatusCompleted        GetOrdersReportParamsStatus = "completed"
+	GetOrdersReportParamsStatusDraft            GetOrdersReportParamsStatus = "draft"
+	GetOrdersReportParamsStatusInTransit        GetOrdersReportParamsStatus = "in_transit"
+	GetOrdersReportParamsStatusReadyForDispatch GetOrdersReportParamsStatus = "ready_for_dispatch"
 )
 
 // Valid indicates whether the value is a known member of the GetOrdersReportParamsStatus enum.
 func (e GetOrdersReportParamsStatus) Valid() bool {
 	switch e {
-	case Arrived:
+	case GetOrdersReportParamsStatusArrived:
 		return true
-	case Assigned:
+	case GetOrdersReportParamsStatusAssigned:
 		return true
-	case Cancelled:
+	case GetOrdersReportParamsStatusCancelled:
 		return true
-	case Completed:
+	case GetOrdersReportParamsStatusCompleted:
 		return true
-	case Draft:
+	case GetOrdersReportParamsStatusDraft:
 		return true
-	case InTransit:
+	case GetOrdersReportParamsStatusInTransit:
 		return true
-	case ReadyForDispatch:
+	case GetOrdersReportParamsStatusReadyForDispatch:
 		return true
 	default:
 		return false
@@ -381,16 +674,41 @@ type ManagerCreate struct {
 	WarehouseId openapi_types.UUID  `json:"warehouseId"`
 }
 
+// Order defines model for Order.
+type Order struct {
+	AssignedAt             *time.Time          `json:"assignedAt,omitempty"`
+	CargoDescription       *string             `json:"cargoDescription,omitempty"`
+	CreatedAt              *time.Time          `json:"createdAt,omitempty"`
+	CreatedById            *openapi_types.UUID `json:"createdById,omitempty"`
+	DeliveredAt            *time.Time          `json:"deliveredAt,omitempty"`
+	DestinationAddress     *string             `json:"destinationAddress,omitempty"`
+	DestinationWarehouseId *openapi_types.UUID `json:"destinationWarehouseId,omitempty"`
+	DriverId               *openapi_types.UUID `json:"driverId,omitempty"`
+	Id                     *openapi_types.UUID `json:"id,omitempty"`
+	ManagerId              *openapi_types.UUID `json:"managerId,omitempty"`
+	OriginAddress          *string             `json:"originAddress,omitempty"`
+	OriginWarehouseId      *openapi_types.UUID `json:"originWarehouseId,omitempty"`
+	PickupFrom             *time.Time          `json:"pickupFrom,omitempty"`
+	PickupTo               *time.Time          `json:"pickupTo,omitempty"`
+	Status                 *OrderStatus        `json:"status,omitempty"`
+	TotalPrice             *float32            `json:"totalPrice,omitempty"`
+	VolumeM3               *float32            `json:"volumeM3,omitempty"`
+	WeightKg               *float32            `json:"weightKg,omitempty"`
+}
+
+// OrderStatus defines model for Order.Status.
+type OrderStatus string
+
 // OrderCancel defines model for OrderCancel.
 type OrderCancel struct {
 	Comment    *string `json:"comment,omitempty"`
 	ReasonCode *string `json:"reasonCode,omitempty"`
 }
 
-// OrderCreate defines model for OrderCreate.
+// OrderCreate Укажите адрес назначения или destinationWarehouseId; адрес склада фиксируется сервером.
 type OrderCreate struct {
 	CargoDescription       *string             `json:"cargoDescription,omitempty"`
-	DestinationAddress     string              `json:"destinationAddress"`
+	DestinationAddress     string              `json:"destinationAddress,omitempty"`
 	DestinationWarehouseId *openapi_types.UUID `json:"destinationWarehouseId,omitempty"`
 	OriginAddress          *string             `json:"originAddress,omitempty"`
 	OriginWarehouseId      *openapi_types.UUID `json:"originWarehouseId,omitempty"`
@@ -409,11 +727,69 @@ type OrderDraftUpdate struct {
 	WeightKg         *float32   `json:"weightKg,omitempty"`
 }
 
+// OrderIncident defines model for OrderIncident.
+type OrderIncident struct {
+	ActualPackages    *int                 `json:"actualPackages,omitempty"`
+	AssignmentId      *openapi_types.UUID  `json:"assignmentId,omitempty"`
+	Description       string               `json:"description"`
+	ExpectedPackages  *int                 `json:"expectedPackages,omitempty"`
+	Id                *openapi_types.UUID  `json:"id,omitempty"`
+	Kind              OrderIncidentKind    `json:"kind"`
+	OrderId           *openapi_types.UUID  `json:"orderId,omitempty"`
+	RecipientName     *string              `json:"recipientName,omitempty"`
+	ReportedAt        *time.Time           `json:"reportedAt,omitempty"`
+	ReportedByUserId  *openapi_types.UUID  `json:"reportedByUserId,omitempty"`
+	Resolution        *string              `json:"resolution,omitempty"`
+	ResolutionNote    *string              `json:"resolutionNote,omitempty"`
+	ResolvedAt        *time.Time           `json:"resolvedAt,omitempty"`
+	ResolvedByUserId  *openapi_types.UUID  `json:"resolvedByUserId,omitempty"`
+	SourceOperationId *openapi_types.UUID  `json:"sourceOperationId,omitempty"`
+	Status            *OrderIncidentStatus `json:"status,omitempty"`
+	WarehouseId       *openapi_types.UUID  `json:"warehouseId,omitempty"`
+}
+
+// OrderIncidentKind defines model for OrderIncident.Kind.
+type OrderIncidentKind string
+
+// OrderIncidentStatus defines model for OrderIncident.Status.
+type OrderIncidentStatus string
+
+// OrderIncidentCreate defines model for OrderIncidentCreate.
+type OrderIncidentCreate struct {
+	ActualPackages   *int                    `json:"actualPackages,omitempty"`
+	Description      string                  `json:"description"`
+	ExpectedPackages *int                    `json:"expectedPackages,omitempty"`
+	Kind             OrderIncidentCreateKind `json:"kind"`
+}
+
+// OrderIncidentCreateKind defines model for OrderIncidentCreate.Kind.
+type OrderIncidentCreateKind string
+
+// OrderIncidentResolve defines model for OrderIncidentResolve.
+type OrderIncidentResolve struct {
+	Note          string                         `json:"note"`
+	RecipientName *string                        `json:"recipientName,omitempty"`
+	Resolution    OrderIncidentResolveResolution `json:"resolution"`
+}
+
+// OrderIncidentResolveResolution defines model for OrderIncidentResolve.Resolution.
+type OrderIncidentResolveResolution string
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
 	FullName string              `json:"fullName"`
 	Password string              `json:"password"`
+}
+
+// TripHandoverCreate defines model for TripHandoverCreate.
+type TripHandoverCreate struct {
+	CargoCondition string             `json:"cargoCondition"`
+	DriverId       openapi_types.UUID `json:"driverId"`
+	Location       string             `json:"location"`
+	PlannedTo      time.Time          `json:"plannedTo"`
+	Reason         string             `json:"reason"`
+	VehicleId      openapi_types.UUID `json:"vehicleId"`
 }
 
 // UserDeleteRequest defines model for UserDeleteRequest.
@@ -480,6 +856,77 @@ type WarehouseCreate struct {
 	Name string `json:"name"`
 }
 
+// WarehouseOperation defines model for WarehouseOperation.
+type WarehouseOperation struct {
+	// AssignmentId Обязательно для load/unload/undo_load; должно совпадать с текущим назначением заказа.
+	AssignmentId    *openapi_types.UUID             `json:"assignmentId,omitempty"`
+	CargoCondition  string                          `json:"cargoCondition"`
+	Comment         *string                         `json:"comment,omitempty"`
+	CreatedByUserId *openapi_types.UUID             `json:"createdByUserId,omitempty"`
+	Id              *openapi_types.UUID             `json:"id,omitempty"`
+	OccurredAt      *time.Time                      `json:"occurredAt,omitempty"`
+	OperationType   WarehouseOperationOperationType `json:"operationType"`
+	OrderId         *openapi_types.UUID             `json:"orderId,omitempty"`
+
+	// PackageCount Для receive/load строго больше нуля.
+	PackageCount int `json:"packageCount"`
+
+	// RecipientName Обязательно для возврата отправителю.
+	RecipientName *string             `json:"recipientName,omitempty"`
+	WarehouseId   *openapi_types.UUID `json:"warehouseId,omitempty"`
+}
+
+// WarehouseOperationOperationType defines model for WarehouseOperation.OperationType.
+type WarehouseOperationOperationType string
+
+// WarehouseOperationCreate defines model for WarehouseOperationCreate.
+type WarehouseOperationCreate struct {
+	// AssignmentId Обязательно для load/unload/undo_load; должно совпадать с текущим назначением заказа.
+	AssignmentId   *openapi_types.UUID                   `json:"assignmentId,omitempty"`
+	CargoCondition string                                `json:"cargoCondition"`
+	Comment        *string                               `json:"comment,omitempty"`
+	OperationType  WarehouseOperationCreateOperationType `json:"operationType"`
+
+	// PackageCount Для receive/load строго больше нуля.
+	PackageCount int `json:"packageCount"`
+
+	// RecipientName Обязательно для возврата отправителю.
+	RecipientName *string `json:"recipientName,omitempty"`
+}
+
+// WarehouseOperationCreateOperationType defines model for WarehouseOperationCreate.OperationType.
+type WarehouseOperationCreateOperationType string
+
+// WarehouseQueueItem defines model for WarehouseQueueItem.
+type WarehouseQueueItem struct {
+	AssignedAt             *time.Time                        `json:"assignedAt,omitempty"`
+	CargoDescription       *string                           `json:"cargoDescription,omitempty"`
+	CreatedAt              *time.Time                        `json:"createdAt,omitempty"`
+	CreatedById            *openapi_types.UUID               `json:"createdById,omitempty"`
+	DeliveredAt            *time.Time                        `json:"deliveredAt,omitempty"`
+	DestinationAddress     *string                           `json:"destinationAddress,omitempty"`
+	DestinationWarehouseId *openapi_types.UUID               `json:"destinationWarehouseId,omitempty"`
+	DriverId               *openapi_types.UUID               `json:"driverId,omitempty"`
+	Id                     *openapi_types.UUID               `json:"id,omitempty"`
+	ManagerId              *openapi_types.UUID               `json:"managerId,omitempty"`
+	OpenIncidentCount      *int                              `json:"openIncidentCount,omitempty"`
+	OriginAddress          *string                           `json:"originAddress,omitempty"`
+	OriginWarehouseId      *openapi_types.UUID               `json:"originWarehouseId,omitempty"`
+	PickupFrom             *time.Time                        `json:"pickupFrom,omitempty"`
+	PickupTo               *time.Time                        `json:"pickupTo,omitempty"`
+	Status                 *WarehouseQueueItemStatus         `json:"status,omitempty"`
+	TotalPrice             *float32                          `json:"totalPrice,omitempty"`
+	VolumeM3               *float32                          `json:"volumeM3,omitempty"`
+	WarehouseStage         *WarehouseQueueItemWarehouseStage `json:"warehouseStage,omitempty"`
+	WeightKg               *float32                          `json:"weightKg,omitempty"`
+}
+
+// WarehouseQueueItemStatus defines model for WarehouseQueueItem.Status.
+type WarehouseQueueItemStatus string
+
+// WarehouseQueueItemWarehouseStage defines model for WarehouseQueueItem.WarehouseStage.
+type WarehouseQueueItemWarehouseStage string
+
 // WarehouseUpdate defines model for WarehouseUpdate.
 type WarehouseUpdate struct {
 	Address   *string                `json:"address,omitempty"`
@@ -517,6 +964,13 @@ type ListOrdersParams struct {
 // ListOrdersParamsStatus defines parameters for ListOrders.
 type ListOrdersParamsStatus string
 
+// ListWarehouseQueueParams defines parameters for ListWarehouseQueue.
+type ListWarehouseQueueParams struct {
+	IncludeClosed *bool `form:"includeClosed,omitempty" json:"includeClosed,omitempty"`
+	Limit         *int  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset        *int  `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListDriversParams defines parameters for ListDrivers.
 type ListDriversParams struct {
 	Status *ListDriversParamsStatus `form:"status,omitempty" json:"status,omitempty"`
@@ -548,6 +1002,9 @@ type CompleteAssignmentJSONRequestBody = DeliveryComplete
 // RejectAssignmentJSONRequestBody defines body for RejectAssignment for application/json ContentType.
 type RejectAssignmentJSONRequestBody = AssignmentReject
 
+// ResolveOrderIncidentJSONRequestBody defines body for ResolveOrderIncident for application/json ContentType.
+type ResolveOrderIncidentJSONRequestBody = OrderIncidentResolve
+
 // CreateOrderJSONRequestBody defines body for CreateOrder for application/json ContentType.
 type CreateOrderJSONRequestBody = OrderCreate
 
@@ -559,6 +1016,15 @@ type CreateAssignmentJSONRequestBody = AssignmentCreate
 
 // CancelOrderJSONRequestBody defines body for CancelOrder for application/json ContentType.
 type CancelOrderJSONRequestBody = OrderCancel
+
+// CreateTripHandoverJSONRequestBody defines body for CreateTripHandover for application/json ContentType.
+type CreateTripHandoverJSONRequestBody = TripHandoverCreate
+
+// CreateOrderIncidentJSONRequestBody defines body for CreateOrderIncident for application/json ContentType.
+type CreateOrderIncidentJSONRequestBody = OrderIncidentCreate
+
+// CreateWarehouseOperationJSONRequestBody defines body for CreateWarehouseOperation for application/json ContentType.
+type CreateWarehouseOperationJSONRequestBody = WarehouseOperationCreate
 
 // AuthLoginJSONRequestBody defines body for AuthLogin for application/json ContentType.
 type AuthLoginJSONRequestBody = LoginRequest
@@ -628,6 +1094,18 @@ type ServerInterface interface {
 	// Скачать документ из личного ящика
 	// (GET /api/v1/documents/{id}/download)
 	DownloadInboxDocument(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Принимающий водитель подтверждает прием груза и продолжает рейс
+	// (POST /api/v1/handovers/{id}/accept)
+	AcceptTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Менеджер отменяет незавершенный запрос передачи
+	// (POST /api/v1/handovers/{id}/cancel)
+	CancelTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Передающий водитель подтверждает сведения о передаче
+	// (POST /api/v1/handovers/{id}/confirm-release)
+	ConfirmTripHandoverRelease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Зафиксировать решение менеджера по проблеме
+	// (POST /api/v1/incidents/{id}/resolve)
+	ResolveOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Список заявок
 	// (GET /api/v1/orders)
 	ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams)
@@ -655,9 +1133,30 @@ type ServerInterface interface {
 	// Пересчитать рекомендации синхронно
 	// (POST /api/v1/orders/{id}/dispatch-recommendations)
 	RefreshDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// История передачи груза при замене ресурсов в пути
+	// (GET /api/v1/orders/{id}/handovers)
+	ListTripHandovers(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Менеджер запрашивает замену водителя или машины в пути
+	// (POST /api/v1/orders/{id}/handovers)
+	CreateTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// История проблем и решений по заказу
+	// (GET /api/v1/orders/{id}/incidents)
+	ListOrderIncidents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Сообщить о проблеме перевозки
+	// (POST /api/v1/orders/{id}/incidents)
+	CreateOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Подготовить заказ к диспетчеризации
 	// (POST /api/v1/orders/{id}/submit)
 	SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Журнал складских операций заказа
+	// (GET /api/v1/orders/{id}/warehouse-operations)
+	ListOrderWarehouseOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Подтвердить приёмку, погрузку, разгрузку, снятие погрузки или возврат
+	// (POST /api/v1/orders/{id}/warehouse-operations)
+	CreateWarehouseOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Очередь входящих и исходящих заказов склада
+	// (GET /api/v1/warehouses/{id}/orders)
+	ListWarehouseQueue(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListWarehouseQueueParams)
 	// Авторизация
 	// (POST /auth/login)
 	AuthLogin(w http.ResponseWriter, r *http.Request)
@@ -826,6 +1325,30 @@ func (_ Unimplemented) DownloadInboxDocument(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Принимающий водитель подтверждает прием груза и продолжает рейс
+// (POST /api/v1/handovers/{id}/accept)
+func (_ Unimplemented) AcceptTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Менеджер отменяет незавершенный запрос передачи
+// (POST /api/v1/handovers/{id}/cancel)
+func (_ Unimplemented) CancelTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Передающий водитель подтверждает сведения о передаче
+// (POST /api/v1/handovers/{id}/confirm-release)
+func (_ Unimplemented) ConfirmTripHandoverRelease(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Зафиксировать решение менеджера по проблеме
+// (POST /api/v1/incidents/{id}/resolve)
+func (_ Unimplemented) ResolveOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Список заявок
 // (GET /api/v1/orders)
 func (_ Unimplemented) ListOrders(w http.ResponseWriter, r *http.Request, params ListOrdersParams) {
@@ -880,9 +1403,51 @@ func (_ Unimplemented) RefreshDispatchRecommendations(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// История передачи груза при замене ресурсов в пути
+// (GET /api/v1/orders/{id}/handovers)
+func (_ Unimplemented) ListTripHandovers(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Менеджер запрашивает замену водителя или машины в пути
+// (POST /api/v1/orders/{id}/handovers)
+func (_ Unimplemented) CreateTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// История проблем и решений по заказу
+// (GET /api/v1/orders/{id}/incidents)
+func (_ Unimplemented) ListOrderIncidents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Сообщить о проблеме перевозки
+// (POST /api/v1/orders/{id}/incidents)
+func (_ Unimplemented) CreateOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Подготовить заказ к диспетчеризации
 // (POST /api/v1/orders/{id}/submit)
 func (_ Unimplemented) SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Журнал складских операций заказа
+// (GET /api/v1/orders/{id}/warehouse-operations)
+func (_ Unimplemented) ListOrderWarehouseOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Подтвердить приёмку, погрузку, разгрузку, снятие погрузки или возврат
+// (POST /api/v1/orders/{id}/warehouse-operations)
+func (_ Unimplemented) CreateWarehouseOperation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Очередь входящих и исходящих заказов склада
+// (GET /api/v1/warehouses/{id}/orders)
+func (_ Unimplemented) ListWarehouseQueue(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListWarehouseQueueParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1340,6 +1905,124 @@ func (siw *ServerInterfaceWrapper) DownloadInboxDocument(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// AcceptTripHandover operation middleware
+func (siw *ServerInterfaceWrapper) AcceptTripHandover(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptTripHandover(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelTripHandover operation middleware
+func (siw *ServerInterfaceWrapper) CancelTripHandover(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelTripHandover(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmTripHandoverRelease operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmTripHandoverRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmTripHandoverRelease(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResolveOrderIncident operation middleware
+func (siw *ServerInterfaceWrapper) ResolveOrderIncident(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResolveOrderIncident(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOrders operation middleware
 func (siw *ServerInterfaceWrapper) ListOrders(w http.ResponseWriter, r *http.Request) {
 
@@ -1564,6 +2247,118 @@ func (siw *ServerInterfaceWrapper) RefreshDispatchRecommendations(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// ListTripHandovers operation middleware
+func (siw *ServerInterfaceWrapper) ListTripHandovers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTripHandovers(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTripHandover operation middleware
+func (siw *ServerInterfaceWrapper) CreateTripHandover(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTripHandover(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrderIncidents operation middleware
+func (siw *ServerInterfaceWrapper) ListOrderIncidents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrderIncidents(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrderIncident operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrderIncident(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrderIncident(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitOrder operation middleware
 func (siw *ServerInterfaceWrapper) SubmitOrder(w http.ResponseWriter, r *http.Request) {
 
@@ -1580,6 +2375,108 @@ func (siw *ServerInterfaceWrapper) SubmitOrder(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SubmitOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrderWarehouseOperations operation middleware
+func (siw *ServerInterfaceWrapper) ListOrderWarehouseOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrderWarehouseOperations(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWarehouseOperation operation middleware
+func (siw *ServerInterfaceWrapper) CreateWarehouseOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWarehouseOperation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWarehouseQueue operation middleware
+func (siw *ServerInterfaceWrapper) ListWarehouseQueue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWarehouseQueueParams
+
+	// ------------- Optional query parameter "includeClosed" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "includeClosed", r.URL.Query(), &params.IncludeClosed, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeClosed", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWarehouseQueue(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2537,6 +3434,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/documents/{id}/download", wrapper.DownloadInboxDocument)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/handovers/{id}/accept", wrapper.AcceptTripHandover)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/handovers/{id}/cancel", wrapper.CancelTripHandover)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/handovers/{id}/confirm-release", wrapper.ConfirmTripHandoverRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/incidents/{id}/resolve", wrapper.ResolveOrderIncident)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/orders", wrapper.ListOrders)
 	})
 	r.Group(func(r chi.Router) {
@@ -2564,7 +3473,28 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/dispatch-recommendations", wrapper.RefreshDispatchRecommendations)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/handovers", wrapper.ListTripHandovers)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/handovers", wrapper.CreateTripHandover)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/incidents", wrapper.ListOrderIncidents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/incidents", wrapper.CreateOrderIncident)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/submit", wrapper.SubmitOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/warehouse-operations", wrapper.ListOrderWarehouseOperations)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/warehouse-operations", wrapper.CreateWarehouseOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/warehouses/{id}/orders", wrapper.ListWarehouseQueue)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.AuthLogin)

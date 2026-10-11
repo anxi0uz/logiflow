@@ -22,13 +22,35 @@ jobs:
 
   go-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: logiflow
+          POSTGRES_PASSWORD: ci-test-password
+          POSTGRES_DB: logiflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logiflow -d logiflow_test"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      LOGIFLOW_TEST_DATABASE_URL: postgres://logiflow:ci-test-password@127.0.0.1:5432/logiflow_test?sslmode=disable
+      LOGIFLOW_TEST_REDIS_ADDR: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - name: Test all Go packages
-        run: go test ./...
+        run: go test -p 1 ./...
 
   python-test:
     runs-on: ubuntu-latest
@@ -43,6 +65,8 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       - name: Install document service dependencies
         run: uv sync --locked --group dev
+      - name: Install PDF font
+        run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
       - name: Test document service
         run: uv run --no-sync pytest -q
       - name: Ruff lint

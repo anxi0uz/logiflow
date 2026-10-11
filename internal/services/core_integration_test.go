@@ -53,7 +53,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 		}
 	}
 	lat, originLon, otherLon := 60.0, 30.0, 31.0
-	warehouse := models.Warehouse{ID: uuid.New(), Name: "Smoke warehouse", Slug: "smoke-warehouse", Address: "Origin", City: "Test", Latitude: &lat, Longitude: &originLon, CreatedAt: time.Now()}
+	warehouse := models.Warehouse{ID: uuid.New(), Status: "active", Name: "Smoke warehouse", Slug: "smoke-warehouse", Address: "Origin", City: "Test", Latitude: &lat, Longitude: &originLon, CreatedAt: time.Now()}
 	if err := storage.Create(ctx, "warehouses", warehouse, pool); err != nil {
 		t.Fatalf("create warehouse: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	plannedFrom := time.Now().Add(2 * time.Hour).Truncate(time.Second)
 	plannedTo := plannedFrom.Add(2 * time.Hour)
 	draft := createDraftOrder(t, ctx, pool, clientID, warehouse.ID, plannedFrom, plannedTo)
-	otherWarehouse := models.Warehouse{ID: uuid.New(), Name: "Other warehouse", Slug: "other-warehouse", Address: "Other", City: "Test", Latitude: &lat, Longitude: &otherLon, CreatedAt: time.Now()}
+	otherWarehouse := models.Warehouse{ID: uuid.New(), Status: "active", Name: "Other warehouse", Slug: "other-warehouse", Address: "Other", City: "Test", Latitude: &lat, Longitude: &otherLon, CreatedAt: time.Now()}
 	if err := storage.Create(ctx, "warehouses", otherWarehouse, pool); err != nil {
 		t.Fatalf("create other warehouse: %v", err)
 	}
@@ -218,6 +218,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if _, err := service.AcceptAssignment(ctx, assignment.ID, driverUserID, "driver"); !errors.Is(err, ErrAssignmentStale) {
 		t.Fatalf("double accept: %v", err)
 	}
+	loadTestAssignment(t, service, assignment, clientID)
 	if _, err := service.StartAssignment(ctx, assignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("start assignment: %v", err)
 	}
@@ -251,7 +252,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 		t.Fatalf("delivery event snapshot: %+v", delivered)
 	}
 	clientNotices, err := storage.GetAll[models.Notification](ctx, "notifications", pool, func(sb *sqlbuilder.SelectBuilder) { sb.Where(sb.EQ("user_id", clientID)) })
-	if err != nil || len(clientNotices) != 4 {
+	if err != nil || len(clientNotices) != 6 {
 		t.Fatalf("delivery notifications: %+v err=%v", clientNotices, err)
 	}
 
@@ -386,6 +387,7 @@ func TestCoreLifecycleAndConcurrentReservation(t *testing.T) {
 	if _, err := service.AcceptAssignment(ctx, managerAssignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("accept manager completion assignment: %v", err)
 	}
+	loadTestAssignment(t, service, managerAssignment, clientID)
 	if _, err := service.StartAssignment(ctx, managerAssignment.ID, driverUserID, "driver"); err != nil {
 		t.Fatalf("start manager completion assignment: %v", err)
 	}
@@ -445,4 +447,23 @@ func createDraftOrder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, cli
 		t.Fatalf("create draft route: %v", err)
 	}
 	return order
+}
+
+func loadTestAssignment(t *testing.T, s *OrderService, a *models.Assignment, actor uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	exists, err := warehouseOperationExists(ctx, s.db, a.OrderID, "receive", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		_, err = s.CreateWarehouseOperation(ctx, a.OrderID, actor, "admin", api.WarehouseOperationCreate{OperationType: "receive", PackageCount: 1, CargoCondition: "Без замечаний"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = s.CreateWarehouseOperation(ctx, a.OrderID, actor, "admin", api.WarehouseOperationCreate{OperationType: "load", AssignmentId: &a.ID, PackageCount: 1, CargoCondition: "Без замечаний"})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

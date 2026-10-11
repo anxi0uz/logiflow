@@ -48,7 +48,7 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 	stream, err := js.StreamInfo("LOGIFLOW_EVENTS")
 	if err != nil {
 		if _, err := js.AddStream(&nats.StreamConfig{
-			Name: "LOGIFLOW_EVENTS", Subjects: []string{"delivery.completed.v1", "document.ready.v1", "dispatch.requested.v1", "dispatch.recommended.v1"},
+			Name: "LOGIFLOW_EVENTS", Subjects: []string{"delivery.completed.v1", "document.ready.v1", "dispatch.requested.v1", "dispatch.recommended.v1", "document.requested.v1"},
 		}); err != nil {
 			// The document service can win the create race during startup.
 			if stream, err = js.StreamInfo("LOGIFLOW_EVENTS"); err != nil {
@@ -62,7 +62,7 @@ func runConnected(ctx context.Context, db *pgxpool.Pool, natsURL string) error {
 			subjects[subject] = true
 		}
 		changed := false
-		for _, subject := range []string{"dispatch.requested.v1", "dispatch.recommended.v1"} {
+		for _, subject := range []string{"dispatch.requested.v1", "dispatch.recommended.v1", "document.requested.v1"} {
 			if !subjects[subject] {
 				stream.Config.Subjects = append(stream.Config.Subjects, subject)
 				changed = true
@@ -219,7 +219,7 @@ func receiveDocumentReady(ctx context.Context, db *pgxpool.Pool, data []byte) er
 	if err := json.Unmarshal(data, &event); err != nil {
 		return invalidEventError{fmt.Sprintf("decode document ready: %v", err)}
 	}
-	if event.EventID == uuid.Nil || event.DocumentID == uuid.Nil || event.OrderID == uuid.Nil || event.UserID == uuid.Nil || event.Type != "delivery_confirmation" {
+	if event.EventID == uuid.Nil || event.DocumentID == uuid.Nil || event.OrderID == uuid.Nil || event.UserID == uuid.Nil || !validDocumentType(event.Type) {
 		return invalidEventError{"invalid document ready required IDs or type"}
 	}
 	tx, err := db.Begin(ctx)
@@ -237,7 +237,7 @@ func receiveDocumentReady(ctx context.Context, db *pgxpool.Pool, data []byte) er
 			return err
 		}
 		if userExists {
-			body := fmt.Sprintf("Подтверждение доставки заказа %s готово", event.OrderID)
+			body := fmt.Sprintf("Документ по заказу %s готов", event.OrderID)
 			if err := storage.Create(ctx, "notifications", models.Notification{
 				ID: uuid.New(), UserID: event.UserID, Title: "Документ готов",
 				Body: &body, DocumentID: &event.DocumentID, CreatedAt: time.Now(),
@@ -249,4 +249,12 @@ func receiveDocumentReady(ctx context.Context, db *pgxpool.Pool, data []byte) er
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func validDocumentType(kind string) bool {
+	switch kind {
+	case "transport_order", "trip_assignment", "cargo_handover", "delivery_confirmation", "service_report", "cancellation_notice":
+		return true
+	}
+	return false
 }

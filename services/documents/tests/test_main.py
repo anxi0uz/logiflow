@@ -42,7 +42,14 @@ def test_service_stops_workers_and_grpc(monkeypatch, stop_kind):
         server = Server()
         nc = MagicMock()
         js = MagicMock()
-        js.stream_info = AsyncMock()
+        js.stream_info = AsyncMock(
+            return_value=SimpleNamespace(
+                config=SimpleNamespace(
+                    subjects=["delivery.completed.v1", "document.ready.v1"]
+                )
+            )
+        )
+        js.update_stream = AsyncMock()
         nc.jetstream.return_value = js
         nc.drain = AsyncMock()
         nc.close = AsyncMock()

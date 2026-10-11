@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -33,3 +34,46 @@ class DocumentReady(BaseModel):
     order_id: UUID
     user_id: UUID
     type: str
+
+
+class DocumentField(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+    value: str = Field(max_length=20000)
+
+
+class DocumentRequested(BaseModel):
+    event_id: UUID
+    order_id: UUID
+    user_id: UUID
+    reference_id: UUID
+    type: Literal[
+        "transport_order",
+        "trip_assignment",
+        "cargo_handover",
+        "service_report",
+        "cancellation_notice",
+    ]
+    occurred_at: datetime
+    recipients: list[UUID] = Field(default_factory=list, max_length=20)
+    fields: list[DocumentField] = Field(min_length=1, max_length=200)
+
+    @field_validator("event_id", "order_id", "user_id", "reference_id")
+    @classmethod
+    def nonzero_id(cls, value: UUID) -> UUID:
+        if value.int == 0:
+            raise ValueError("ID must not be nil")
+        return value
+
+    @field_validator("recipients")
+    @classmethod
+    def nonzero_recipients(cls, values: list[UUID]) -> list[UUID]:
+        if any(value.int == 0 for value in values):
+            raise ValueError("recipient ID must not be nil")
+        return values
+
+    @field_validator("occurred_at")
+    @classmethod
+    def aware_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamp must have a timezone")
+        return value

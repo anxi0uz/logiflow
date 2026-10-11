@@ -79,6 +79,9 @@ func (s *OrderService) SubmitOrder(ctx context.Context, id uuid.UUID, userID uui
 	if err := enqueueDispatchRequest(ctx, tx, order); err != nil {
 		return nil, err
 	}
+	if err := s.enqueueOperationalDocument(ctx, tx, order, nil, "transport_order", order.ID, userID, nil); err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit submit order: %w", err)
 	}
@@ -139,6 +142,15 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 	if role == "client" && (order.CreatedByID == nil || *order.CreatedByID != userID || (order.Status != models.OrderDraft && order.Status != models.OrderReadyForDispatch)) {
 		return nil, ErrForbidden
 	}
+	if len(assignments) == 1 {
+		loaded, err := warehouseLoadExists(ctx, tx, order.ID, assignments[0].ID)
+		if err != nil {
+			return nil, err
+		}
+		if loaded {
+			return nil, ErrWarehouseOperationConflict
+		}
+	}
 	if !models.CanTransitionOrder(order.Status, models.OrderCancelled) {
 		return nil, ErrInvalidOrderTransition
 	}
@@ -181,6 +193,13 @@ func (s *OrderService) CancelOrder(ctx context.Context, id uuid.UUID, userID uui
 		if err := s.enqueueDispatchAfterRelease(ctx, tx, &assignments[i]); err != nil {
 			return nil, err
 		}
+	}
+	reason := "Не указана"
+	if req.ReasonCode != nil {
+		reason = *req.ReasonCode
+	}
+	if err := s.enqueueOperationalDocument(ctx, tx, order, nil, "cancellation_notice", order.ID, userID, []documentField{{"Причина отмены", reason}}); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit cancel order: %w", err)
@@ -289,6 +308,13 @@ func (s *OrderService) CreateAssignment(ctx context.Context, orderID uuid.UUID, 
 			return nil, ErrInvalidOrderTransition
 		}
 	} else {
+		loaded, err := warehouseLoadExists(ctx, tx, order.ID, previous.ID)
+		if err != nil {
+			return nil, err
+		}
+		if loaded {
+			return nil, ErrWarehouseOperationConflict
+		}
 		if previous.OrderID != orderID || (previous.Status != models.AssignmentPendingAcceptance && previous.Status != models.AssignmentAccepted) {
 			return nil, ErrAssignmentStale
 		}
@@ -529,6 +555,14 @@ func (s *OrderService) StartAssignment(ctx context.Context, id uuid.UUID, userID
 	if assignment.Status != models.AssignmentAccepted || !models.CanTransitionOrder(order.Status, models.OrderInTransit) {
 		return nil, ErrInvalidOrderTransition
 	}
+	if err := requireNoOpenIncidents(ctx, tx, order.ID); err != nil {
+		return nil, err
+	}
+	if order.OriginWarehouseID != nil {
+		if err := requireWarehouseOperation(ctx, tx, order.ID, "load", &assignment.ID); err != nil {
+			return nil, err
+		}
+	}
 	now := time.Now()
 	assignment.Status = models.AssignmentActive
 	assignment.StartedAt = &now
@@ -548,6 +582,9 @@ func (s *OrderService) StartAssignment(ctx context.Context, id uuid.UUID, userID
 		if err := s.notify(ctx, tx, *order.CreatedByID, "Доставка началась", fmt.Sprintf("Водитель начал перевозку заказа %s", order.ID)); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.enqueueOperationalDocument(ctx, tx, order, assignment, "trip_assignment", assignment.ID, userID, nil); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
@@ -616,12 +653,27 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 		if err != nil {
 			return nil, err
 		}
-		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+		responsible := order.OriginWarehouseID
+		if order.DestinationWarehouseID != nil {
+			responsible = order.DestinationWarehouseID
+		}
+		if responsible == nil || *responsible != warehouseID {
 			return nil, ErrForbidden
 		}
 	}
 	if assignment.Status != models.AssignmentActive || !models.CanTransitionOrder(order.Status, models.OrderCompleted) {
 		return nil, ErrInvalidOrderTransition
+	}
+	if err := requireNoOpenIncidents(ctx, tx, order.ID); err != nil {
+		return nil, err
+	}
+	if order.DestinationWarehouseID != nil {
+		if role == "driver" {
+			return nil, ErrForbidden
+		}
+		if err := requireWarehouseOperation(ctx, tx, order.ID, "unload", &assignment.ID); err != nil {
+			return nil, err
+		}
 	}
 	now := time.Now()
 	assignment.Status = models.AssignmentCompleted
@@ -671,6 +723,26 @@ func (s *OrderService) CompleteAssignment(ctx context.Context, id uuid.UUID, use
 		}
 	}
 	if err := s.enqueueDispatchAfterRelease(ctx, tx, assignment); err != nil {
+		return nil, err
+	}
+	history, err := storage.GetAll[models.Assignment](ctx, "assignments", tx, func(b *sqlbuilder.SelectBuilder) {
+		b.Where(b.EQ("order_id", order.ID), b.IsNotNull("started_at")).OrderBy("started_at", "id")
+	})
+	if err != nil {
+		return nil, err
+	}
+	var legs []documentField
+	for i, leg := range history {
+		ended := ""
+		if leg.ReleasedAt != nil {
+			ended = leg.ReleasedAt.UTC().Format(time.RFC3339)
+		}
+		if leg.CompletedAt != nil {
+			ended = leg.CompletedAt.UTC().Format(time.RFC3339)
+		}
+		legs = append(legs, documentField{fmt.Sprintf("Участок %d", i+1), fmt.Sprintf("Назначение %s; водитель %s; машина %s; начало %s; окончание %s", leg.ID, leg.DriverID, leg.VehicleID, leg.StartedAt.UTC().Format(time.RFC3339), ended)})
+	}
+	if err := s.enqueueOperationalDocument(ctx, tx, order, assignment, "service_report", order.ID, userID, legs); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -371,7 +371,7 @@ func (s *Server) GetMyTrips(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orders, err := storage.GetAll[models.Order](ctx, "orders", s.DB, func(sb *sqlbuilder.SelectBuilder) {
-		sb.Where(sb.EQ("driver_id", driver.ID))
+		sb.Where(sb.Or(sb.EQ("driver_id", driver.ID), "id IN (SELECT order_id FROM assignments WHERE driver_id = "+sb.Var(driver.ID)+" AND started_at IS NOT NULL)"))
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "Error while getting orders", slog.String("error", err.Error()))

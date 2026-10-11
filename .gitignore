@@ -1,4 +1,5 @@
 __pycache__/
 .pytest_cache/
 .venv/
-docs/ai/
+/output/pdf/
+/tmp/pdfs/

@@ -13,7 +13,7 @@ from reportlab.pdfgen import canvas
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from document_service.models import Document, OutboxEvent
+from document_service.models import Document, DocumentRecipient, OutboxEvent
 from document_service.modules.documents.schemas import (
     DeliveryCompleted,
     DocumentReady,
@@ -90,6 +90,12 @@ def render_delivery_confirmation(event: DeliveryCompleted, font_path: str) -> by
     pdf.drawString(left, height - 178, "ДОСТАВКИ")
 
     y = height - 244
+    pdf.setFont("LogiflowBody", 7)
+    pdf.drawString(
+        left,
+        height - 204,
+        "Внутреннее подтверждение учетной записью. Не заменяет ЭТрН или путевой лист.",
+    )
     delivered = event.delivered_at
     if delivered.tzinfo is not None:
         delivered = delivered.astimezone(UTC)
@@ -172,6 +178,7 @@ async def accept_delivery(
 
     document = Document(
         order_id=event.order_id,
+        reference_id=event.order_id,
         user_id=event.user_id,
         type="delivery_confirmation",
         title="Подтверждение доставки",
@@ -180,16 +187,7 @@ async def accept_delivery(
     db.add(document)
     await db.flush()
 
-    outbox = OutboxEvent(id=uuid4(), subject="document.ready.v1", payload={})
-    ready = DocumentReady(
-        event_id=outbox.id,
-        document_id=document.id,
-        order_id=document.order_id,
-        user_id=document.user_id,
-        type=document.type,
-    )
-    outbox.payload = ready.model_dump(mode="json")
-    db.add(outbox)
+    add_ready_event(db, document)
     await db.commit()
 
     log.info(
@@ -199,3 +197,19 @@ async def accept_delivery(
         user_id=str(document.user_id),
     )
     return document
+
+
+def add_ready_event(db: AsyncSession, document: Document, recipients=()) -> None:
+    for user_id in sorted({document.user_id, *recipients}, key=str):
+        if user_id != document.user_id:
+            db.add(DocumentRecipient(document_id=document.id, user_id=user_id))
+        outbox = OutboxEvent(id=uuid4(), subject="document.ready.v1", payload={})
+        ready = DocumentReady(
+            event_id=outbox.id,
+            document_id=document.id,
+            order_id=document.order_id,
+            user_id=user_id,
+            type=document.type,
+        )
+        outbox.payload = ready.model_dump(mode="json")
+        db.add(outbox)

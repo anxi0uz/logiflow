@@ -52,10 +52,42 @@ components:
       properties:
         id: { type: string, format: uuid }
         order_id: { type: string, format: uuid }
-        type: { type: string, enum: [delivery_confirmation] }
+        type: { type: string, enum: [transport_order, trip_assignment, cargo_handover, delivery_confirmation, service_report, cancellation_notice] }
         title: { type: string }
         created_at: { type: string, format: date-time }
         size_bytes: { type: integer, format: int64 }
+
+    TripHandoverCreate:
+      type: object
+      required: [driverId, vehicleId, plannedTo, reason, location, cargoCondition]
+      properties:
+        driverId: { type: string, format: uuid }
+        vehicleId: { type: string, format: uuid }
+        plannedTo: { type: string, format: date-time }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+        location: { type: string, minLength: 1, maxLength: 1000 }
+        cargoCondition: { type: string, minLength: 1, maxLength: 2000 }
+
+    TripHandover:
+      type: object
+      required: [id, orderId, previousAssignmentId, driverId, vehicleId, status, reason, location, cargoCondition, plannedTo, createdAt, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        previousAssignmentId: { type: string, format: uuid }
+        nextAssignmentId: { type: string, format: uuid }
+        driverId: { type: string, format: uuid }
+        vehicleId: { type: string, format: uuid }
+        createdByUserId: { type: string, format: uuid }
+        status: { type: string, enum: [pending, completed, cancelled, expired] }
+        reason: { type: string }
+        location: { type: string }
+        cargoCondition: { type: string }
+        plannedTo: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        outgoingConfirmedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
 
     # ─── Auth ─────────────────────────────────────────────────────────────────
 
@@ -430,6 +462,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        destinationWarehouseId:
+          type: string
+          format: uuid
+          nullable: true
         originAddress:
           type: string
           nullable: true
@@ -472,7 +508,7 @@ components:
 
     OrderCreate:
       type: object
-      required: [destinationAddress]
+      description: Укажите адрес назначения или destinationWarehouseId; адрес склада фиксируется сервером.
       properties:
         originWarehouseId:
           type: string
@@ -483,6 +519,7 @@ components:
           nullable: true
         destinationAddress:
           type: string
+          x-go-type-skip-optional-pointer: true
         cargoDescription:
           type: string
           nullable: true
@@ -504,6 +541,73 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    WarehouseOperationCreate:
+      type: object
+      required: [operationType, packageCount, cargoCondition]
+      properties:
+        operationType: { type: string, enum: [receive, load, unload, undo_load, return_to_sender] }
+        assignmentId:
+          type: string
+          format: uuid
+          description: Обязательно для load/unload/undo_load; должно совпадать с текущим назначением заказа.
+        packageCount: { type: integer, minimum: 0, description: Для receive/load строго больше нуля. }
+        cargoCondition: { type: string, minLength: 1, maxLength: 2000 }
+        comment: { type: string, maxLength: 2000 }
+        recipientName: { type: string, maxLength: 200, description: Обязательно для возврата отправителю. }
+    WarehouseOperation:
+      allOf:
+        - $ref: "#/components/schemas/WarehouseOperationCreate"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            orderId: { type: string, format: uuid }
+            warehouseId: { type: string, format: uuid }
+            createdByUserId: { type: string, format: uuid }
+            occurredAt: { type: string, format: date-time }
+    WarehouseQueueItem:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            openIncidentCount: { type: integer, minimum: 0 }
+            warehouseStage:
+              type: string
+              enum: [awaiting_receipt, awaiting_assignment, awaiting_loading, ready_to_depart, departed, expected, awaiting_unloading, received, awaiting_return, returned_to_sender, incident_open, completed, cancelled]
+
+    OrderIncidentCreate:
+      type: object
+      required: [kind, description]
+      properties:
+        kind: { type: string, enum: [vehicle_breakdown, cargo_damage, quantity_discrepancy, recipient_refusal, other] }
+        description: { type: string, minLength: 1, maxLength: 2000 }
+        expectedPackages: { type: integer, minimum: 0 }
+        actualPackages: { type: integer, minimum: 0 }
+    OrderIncidentResolve:
+      type: object
+      required: [resolution, note]
+      properties:
+        resolution: { type: string, enum: [repaired, resources_replaced, accept_discrepancy, accept_with_remarks, remediated, recipient_accepted] }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+        recipientName: { type: string, maxLength: 200 }
+    OrderIncident:
+      allOf:
+        - $ref: "#/components/schemas/OrderIncidentCreate"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            orderId: { type: string, format: uuid }
+            assignmentId: { type: string, format: uuid }
+            warehouseId: { type: string, format: uuid }
+            sourceOperationId: { type: string, format: uuid }
+            status: { type: string, enum: [open, resolved] }
+            reportedByUserId: { type: string, format: uuid }
+            reportedAt: { type: string, format: date-time }
+            resolution: { type: string }
+            resolutionNote: { type: string }
+            recipientName: { type: string }
+            resolvedByUserId: { type: string, format: uuid }
+            resolvedAt: { type: string, format: date-time }
 
     OrderDraftUpdate:
       type: object
@@ -1611,6 +1715,138 @@ paths:
       responses:
         "200": { description: Доставка завершена }
 
+  /api/v1/orders/{id}/warehouse-operations:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listOrderWarehouseOperations
+      summary: Журнал складских операций заказа
+      tags: [Warehouses]
+      responses:
+        "200":
+          description: Журнал с участниками и фактическими сведениями
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      operations:
+                        type: array
+                        items: { $ref: "#/components/schemas/WarehouseOperation" }
+    post:
+      operationId: createWarehouseOperation
+      summary: Подтвердить приёмку, погрузку, разгрузку, снятие погрузки или возврат
+      description: Менеджер соответствующего склада или admin. receive после submit; load перед стартом; unload после прибытия; undo_load до выезда; return_to_sender после отмены. Повтор операции — 409.
+      tags: [Warehouses]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WarehouseOperationCreate" }
+      responses:
+        "201": { description: Складская операция зарегистрирована }
+        "403": { description: Чужой склад или неподходящая роль }
+        "409": { description: Неверный этап, повтор или отсутствие предшествующей операции }
+        "422": { description: Неверные фактические сведения }
+  /api/v1/warehouses/{id}/orders:
+    get:
+      operationId: listWarehouseQueue
+      summary: Очередь входящих и исходящих заказов склада
+      tags: [Warehouses]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: includeClosed
+          in: query
+          schema: { type: boolean, default: false }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+      responses:
+        "200":
+          description: Заказы с текущим warehouseStage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items: { $ref: "#/components/schemas/WarehouseQueueItem" }
+        "403": { description: Менеджеру доступна только очередь своего склада }
+
+  /api/v1/orders/{id}/incidents:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listOrderIncidents
+      summary: История проблем и решений по заказу
+      tags: [Orders]
+      responses:
+        "200":
+          description: История инцидентов
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      incidents:
+                        type: array
+                        items: { $ref: "#/components/schemas/OrderIncident" }
+    post:
+      operationId: createOrderIncident
+      summary: Сообщить о проблеме перевозки
+      description: Владелец, менеджер своего склада, текущий принявший назначение водитель или admin.
+      tags: [Orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderIncidentCreate" }
+      responses:
+        "201": { description: Проблема зарегистрирована; старт/завершение блокируются до решения }
+        "403": { description: Нет права сообщать о проблеме }
+        "409": { description: Недопустимый этап }
+  /api/v1/incidents/{id}/resolve:
+    post:
+      operationId: resolveOrderIncident
+      summary: Зафиксировать решение менеджера по проблеме
+      tags: [Orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderIncidentResolve" }
+      responses:
+        "200": { description: Решение и его автор сохранены }
+        "403": { description: Решение доступно ответственному менеджеру/admin }
+        "409": { description: Повтор решения или недостаточно подтверждений }
+
   /api/v1/documents:
     get:
       operationId: listInboxDocuments
@@ -1839,3 +2075,77 @@ paths:
                 $ref: "#/components/schemas/ApiResponse"
         "403":
           description: Нет доступа
+
+  /api/v1/orders/{id}/handovers:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listTripHandovers
+      security: [{ BearerAuth: [] }]
+      summary: История передачи груза при замене ресурсов в пути
+      responses:
+        '200': { description: История передач }
+    post:
+      operationId: createTripHandover
+      security: [{ BearerAuth: [] }]
+      summary: Менеджер запрашивает замену водителя или машины в пути
+      description: До подтверждения обеими сторонами старое назначение сохраняется. Целевые ресурсы проверяются и бронируются при accept.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TripHandoverCreate' }
+      responses:
+        '201': { description: Запрос передачи создан }
+        '403': { description: Недостаточно прав }
+        '409': { description: Неверное состояние или уже есть запрос }
+        '422': { description: Некорректные данные или ресурсы }
+
+  /api/v1/handovers/{id}/confirm-release:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: confirmTripHandoverRelease
+      security: [{ BearerAuth: [] }]
+      summary: Передающий водитель подтверждает сведения о передаче
+      responses:
+        '200': { description: Подтверждение зафиксировано }
+        '403': { description: Только текущий водитель }
+        '409': { description: Запрос истек или состояние изменилось }
+
+  /api/v1/handovers/{id}/accept:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: acceptTripHandover
+      security: [{ BearerAuth: [] }]
+      summary: Принимающий водитель подтверждает прием груза и продолжает рейс
+      description: После confirm-release атомарно закрывает старое назначение и создает active назначение. Это подтверждение учетной записью, не УКЭП.
+      responses:
+        '200': { description: Передача завершена }
+        '403': { description: Только принимающий водитель }
+        '409': { description: Нет первого подтверждения, запрос истек или конфликт брони }
+
+  /api/v1/handovers/{id}/cancel:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: cancelTripHandover
+      security: [{ BearerAuth: [] }]
+      summary: Менеджер отменяет незавершенный запрос передачи
+      responses:
+        '200': { description: Запрос отменен, прежнее назначение сохранено }
+        '403': { description: Недостаточно прав }
+        '409': { description: Запрос уже закрыт }
