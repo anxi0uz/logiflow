@@ -56,7 +56,8 @@ go tool oapi-codegen --config configs/oapi-cfg.yaml internal/api/api.swagger.yam
   и все три handover-теста. Проверены снятие погрузки/замена машины,
   недостача вплоть до нулевой приёмки, выдача после отмены, повреждение,
   отказ получателя и конкурентное решение проблемы.
-  `go vet ./...` также прошёл; golangci-lint локально не запускался.
+  `go vet ./...` и golangci-lint v2.11.4 (версия CI) также прошли.
+  Линтер проверен с `GOTOOLCHAIN=go1.25.7`, соответствующим `go.mod`.
 - Dispatch: все 5 pytest прошли на хосте и в образе с Python 3.13.
 - Documents: все 18 pytest прошли с DejaVu Sans; проверяются шесть типов,
   кириллица, длинные поля, повторное событие, получатели и невалидные события.
@@ -83,4 +84,5 @@ go tool oapi-codegen --config configs/oapi-cfg.yaml internal/api/api.swagger.yam
 
 CI содержит Go lint/tests, pytest/Ruff обоих сервисов и HTTP E2E.
 Go job поднимает PostgreSQL/Redis и запускает пакеты последовательно с test env,
-чтобы integration tests не пропускались. Удалённый CI в этой сессии не запускался.
+чтобы integration tests не пропускались. Актуальный результат удалённого CI
+смотреть в GitHub Actions для текущего коммита.

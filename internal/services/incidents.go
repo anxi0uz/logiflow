@@ -252,11 +252,12 @@ func (s *OrderService) ResolveOrderIncident(ctx context.Context, id, userID uuid
 func (s *OrderService) recordWarehouseDiscrepancy(ctx context.Context, tx pgx.Tx, order *models.Order, op *models.WarehouseOperation) error {
 	var expected int
 	var err error
-	if op.OperationType == "undo_load" {
+	switch op.OperationType {
+	case "undo_load":
 		err = tx.QueryRow(ctx, `SELECT package_count FROM warehouse_operations WHERE order_id=$1 AND assignment_id=$2 AND operation_type='load'`, order.ID, *op.AssignmentID).Scan(&expected)
-	} else if op.OperationType == "load" || op.OperationType == "return_to_sender" {
+	case "load", "return_to_sender":
 		err = tx.QueryRow(ctx, `SELECT package_count FROM warehouse_operations WHERE order_id=$1 AND operation_type='receive'`, order.ID).Scan(&expected)
-	} else {
+	default:
 		err = tx.QueryRow(ctx, `SELECT l.package_count FROM warehouse_operations l WHERE l.order_id=$1 AND l.operation_type='load' AND NOT EXISTS(SELECT 1 FROM warehouse_operations u WHERE u.assignment_id=l.assignment_id AND u.operation_type='undo_load') ORDER BY l.occurred_at DESC,l.id DESC LIMIT 1`, order.ID).Scan(&expected)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
