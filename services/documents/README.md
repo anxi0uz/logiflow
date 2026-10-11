@@ -4,6 +4,8 @@ Private Python service for six internal PDF types. These are operational records
 
 Core publishes immutable snapshots in `document.requested.v1`; delivery confirmation retains `delivery.completed.v1`. This service generates the file, stores it in its own PostgreSQL database, and publishes `document.ready.v1` for each recipient. Core creates linked in-app notifications. Clients use Core's authenticated HTTP endpoints; the Python gRPC endpoint is private.
 
+New order snapshots include sender, recipient and carrier details, transport basis and declared package count. Final documents also include the actual delivery receipt: recipient role, stated authority, actual quantity, condition, seal, remarks and recording metadata. Optional `fields` on `delivery.completed.v1` preserves compatibility with older events. Long values continue across pages, including text without spaces. Counterparty edits never rewrite issued PDFs.
+
 | Type | Trigger | Reference |
 | --- | --- | --- |
 | `transport_order` | Order submitted for dispatch | Order |

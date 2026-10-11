@@ -27,6 +27,13 @@ type OrderService struct {
 	routePlanner routing.Planner
 }
 type OrderServicer interface {
+	CreateCounterparty(context.Context, uuid.UUID, string, api.CounterpartyWrite) (*models.Counterparty, error)
+	GetCounterparty(context.Context, uuid.UUID, uuid.UUID, string) (*models.Counterparty, error)
+	ListCounterparties(context.Context, uuid.UUID, string, api.ListCounterpartiesParams) ([]models.Counterparty, error)
+	UpdateCounterparty(context.Context, uuid.UUID, uuid.UUID, string, api.CounterpartyWrite) (*models.Counterparty, error)
+	SetTransportDetails(context.Context, uuid.UUID, uuid.UUID, string, api.TransportDetailsWrite) (*models.Order, error)
+	CreateDeliveryReceipt(context.Context, uuid.UUID, uuid.UUID, string, api.DeliveryReceiptCreate) (*models.DeliveryReceipt, error)
+	GetDeliveryReceipt(context.Context, uuid.UUID, uuid.UUID, string) (*models.DeliveryReceipt, error)
 	CreateOrderIncident(context.Context, uuid.UUID, uuid.UUID, string, api.OrderIncidentCreate) (*models.OrderIncident, error)
 	ListOrderIncidents(context.Context, uuid.UUID, uuid.UUID, string) ([]models.OrderIncident, error)
 	ResolveOrderIncident(context.Context, uuid.UUID, uuid.UUID, string, api.OrderIncidentResolve) (*models.OrderIncident, error)
@@ -147,6 +154,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 
 	orderID := uuid.New()
 	order := models.Order{
+		TransportPolicyVersion: 1,
 		ID:                     orderID,
 		CreatedByID:            &userID,
 		OriginWarehouseID:      req.OriginWarehouseId,

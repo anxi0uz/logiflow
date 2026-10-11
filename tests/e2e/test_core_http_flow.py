@@ -43,6 +43,7 @@ def test_order_flow_and_concurrent_reservation():
     suffix = uuid4().hex[:12]
     user_ids = {}
     order_ids = []
+    counterparty_ids = []
     warehouse_ids = [uuid4(), uuid4()]
     vehicle_id = uuid4()
     driver_ids = [uuid4(), uuid4()]
@@ -159,6 +160,32 @@ def test_order_flow_and_concurrent_reservation():
 
         now = datetime.now(UTC)
 
+        for index, name in enumerate(("Отправитель", "Получатель", "Перевозчик")):
+            party = call(
+                "POST",
+                "/api/v1/counterparties",
+                tokens["admin"] if index == 2 else tokens["client"],
+                {
+                    "kind": "organization",
+                    "name": name,
+                    "inn": "7707083893",
+                    "address": "Тестовый адрес организации",
+                    "contactName": "Иван Петров",
+                    "phone": "+7 900 000-00-00",
+                    "shared": index == 2,
+                },
+                201,
+            )["data"]["counterparty"]
+            counterparty_ids.append(party["id"])
+        call(
+            "GET",
+            f"/api/v1/counterparties/{counterparty_ids[0]}",
+            tokens["manager3"],
+            expected=404,
+        )
+        call("GET", f"/api/v1/counterparties/{counterparty_ids[2]}", tokens["client"])
+        call("GET", "/api/v1/counterparties", tokens["driver1"], expected=403)
+
         def create_and_submit(hours):
             start = now + timedelta(hours=hours)
             end = start + timedelta(hours=1)
@@ -193,6 +220,29 @@ def test_order_flow_and_concurrent_reservation():
             assert order["destinationWarehouseId"] == str(warehouse_ids[1])
             assert order["originAddress"] == "Test address 0"
             assert order["destinationAddress"] == "Test address 1"
+            assert order["transportPolicyVersion"] == 1
+            missing = call(
+                "POST",
+                f"/api/v1/orders/{order_id}/submit",
+                tokens["client"],
+                expected=409,
+            )
+            assert "TRANSPORT_DETAILS_REQUIRED" in str(missing)
+            call(
+                "PUT",
+                f"/api/v1/orders/{order_id}/transport-details",
+                tokens["client"],
+                {
+                    "senderId": counterparty_ids[0],
+                    "recipientId": counterparty_ids[1],
+                    "carrierId": counterparty_ids[2],
+                    "basisType": "transport_request",
+                    "basisNumber": f"E2E-{suffix}",
+                    "basisDate": now.date().isoformat(),
+                    "packageCount": 5,
+                    "terms": "Приёмка по фактическому количеству мест с фиксацией замечаний",
+                },
+            )
             call("POST", f"/api/v1/orders/{order_id}/submit", tokens["client"])
             receipt = {
                 "operationType": "receive",
@@ -618,6 +668,70 @@ def test_order_flow_and_concurrent_reservation():
                 "note": "Недостача зафиксирована, претензия передана ответственному",
             },
         )
+        missing = call(
+            "POST",
+            f"/api/v1/assignments/{second['id']}/complete",
+            tokens["manager3"],
+            expected=409,
+        )
+        assert "DELIVERY_RECEIPT_REQUIRED" in str(missing)
+        receipt = {
+            "assignmentId": second["id"],
+            "recipientName": "Recipient",
+            "recipientRole": "Кладовщик",
+            "authorityBasis": "Приёмка представителем склада, со слов менеджера",
+            "packageCount": 4,
+            "cargoCondition": "Принято с недостачей одного места",
+            "sealNumber": "TEST-SEAL-1",
+            "comment": "Недостача зафиксирована",
+        }
+        for name in ("client", "driver2", "manager1"):
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/delivery-receipt",
+                tokens[name],
+                receipt,
+                403,
+            )
+        for invalid_receipt in (
+            {key: value for key, value in receipt.items() if key != "packageCount"},
+            {**receipt, "packageCount": None},
+        ):
+            call(
+                "POST",
+                f"/api/v1/orders/{order_id}/delivery-receipt",
+                tokens["manager3"],
+                invalid_receipt,
+                400,
+            )
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/delivery-receipt",
+            tokens["manager3"],
+            {**receipt, "packageCount": 5},
+            422,
+        )
+        saved_receipt = call(
+            "POST",
+            f"/api/v1/orders/{order_id}/delivery-receipt",
+            tokens["manager3"],
+            receipt,
+            201,
+        )["data"]["receipt"]
+        assert saved_receipt["recordedByUserId"] == str(user_ids["manager3"])
+        assert (
+            call(
+                "GET", f"/api/v1/orders/{order_id}/delivery-receipt", tokens["client"]
+            )["data"]["receipt"]["id"]
+            == saved_receipt["id"]
+        )
+        call(
+            "POST",
+            f"/api/v1/orders/{order_id}/delivery-receipt",
+            tokens["manager3"],
+            receipt,
+            409,
+        )
         completed = call(
             "POST",
             f"/api/v1/assignments/{second['id']}/complete",
@@ -964,6 +1078,7 @@ def test_order_flow_and_concurrent_reservation():
 
     finally:
         for order_id in order_ids:
+            db.execute("DELETE FROM delivery_receipts WHERE order_id = %s", (order_id,))
             db.execute("DELETE FROM order_incidents WHERE order_id = %s", (order_id,))
             db.execute(
                 "DELETE FROM warehouse_operations WHERE order_id = %s", (order_id,)
@@ -978,6 +1093,9 @@ def test_order_flow_and_concurrent_reservation():
         for warehouse_id in warehouse_ids:
             db.execute("DELETE FROM warehouses WHERE id = %s", (warehouse_id,))
         for user_id in user_ids.values():
+            db.execute(
+                "DELETE FROM counterparties WHERE owner_user_id = %s", (user_id,)
+            )
             db.execute("DELETE FROM users WHERE id = %s", (user_id,))
         http.close()
         db.close()

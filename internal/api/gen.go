@@ -36,6 +36,84 @@ func (e AssignmentCreateSource) Valid() bool {
 	}
 }
 
+// Defines values for CounterpartyKind.
+const (
+	CounterpartyKindEntrepreneur CounterpartyKind = "entrepreneur"
+	CounterpartyKindIndividual   CounterpartyKind = "individual"
+	CounterpartyKindOrganization CounterpartyKind = "organization"
+)
+
+// Valid indicates whether the value is a known member of the CounterpartyKind enum.
+func (e CounterpartyKind) Valid() bool {
+	switch e {
+	case CounterpartyKindEntrepreneur:
+		return true
+	case CounterpartyKindIndividual:
+		return true
+	case CounterpartyKindOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CounterpartyStatus.
+const (
+	CounterpartyStatusActive   CounterpartyStatus = "active"
+	CounterpartyStatusArchived CounterpartyStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the CounterpartyStatus enum.
+func (e CounterpartyStatus) Valid() bool {
+	switch e {
+	case CounterpartyStatusActive:
+		return true
+	case CounterpartyStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CounterpartyWriteKind.
+const (
+	CounterpartyWriteKindEntrepreneur CounterpartyWriteKind = "entrepreneur"
+	CounterpartyWriteKindIndividual   CounterpartyWriteKind = "individual"
+	CounterpartyWriteKindOrganization CounterpartyWriteKind = "organization"
+)
+
+// Valid indicates whether the value is a known member of the CounterpartyWriteKind enum.
+func (e CounterpartyWriteKind) Valid() bool {
+	switch e {
+	case CounterpartyWriteKindEntrepreneur:
+		return true
+	case CounterpartyWriteKindIndividual:
+		return true
+	case CounterpartyWriteKindOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CounterpartyWriteStatus.
+const (
+	CounterpartyWriteStatusActive   CounterpartyWriteStatus = "active"
+	CounterpartyWriteStatusArchived CounterpartyWriteStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the CounterpartyWriteStatus enum.
+func (e CounterpartyWriteStatus) Valid() bool {
+	switch e {
+	case CounterpartyWriteStatusActive:
+		return true
+	case CounterpartyWriteStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DocumentSummaryType.
 const (
 	CancellationNotice   DocumentSummaryType = "cancellation_notice"
@@ -237,6 +315,24 @@ func (e OrderIncidentResolveResolution) Valid() bool {
 	case Repaired:
 		return true
 	case ResourcesReplaced:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TransportDetailsWriteBasisType.
+const (
+	Contract         TransportDetailsWriteBasisType = "contract"
+	TransportRequest TransportDetailsWriteBasisType = "transport_request"
+)
+
+// Valid indicates whether the value is a known member of the TransportDetailsWriteBasisType enum.
+func (e TransportDetailsWriteBasisType) Valid() bool {
+	switch e {
+	case Contract:
+		return true
+	case TransportRequest:
 		return true
 	default:
 		return false
@@ -605,10 +701,75 @@ type AssignmentReject struct {
 	ReasonCode string  `json:"reasonCode"`
 }
 
-// DeliveryComplete defines model for DeliveryComplete.
+// Counterparty defines model for Counterparty.
+type Counterparty struct {
+	Address     string              `json:"address"`
+	ContactName string              `json:"contactName"`
+	CreatedAt   *time.Time          `json:"createdAt,omitempty"`
+	Email       *string             `json:"email,omitempty"`
+	Id          *openapi_types.UUID `json:"id,omitempty"`
+	Inn         *string             `json:"inn,omitempty"`
+	Kind        CounterpartyKind    `json:"kind"`
+	Kpp         *string             `json:"kpp,omitempty"`
+	Name        string              `json:"name"`
+	OwnerUserId *openapi_types.UUID `json:"ownerUserId,omitempty"`
+	Phone       *string             `json:"phone,omitempty"`
+
+	// Shared Только admin может публиковать запись в общем каталоге.
+	Shared    *bool               `json:"shared,omitempty"`
+	Status    *CounterpartyStatus `json:"status,omitempty"`
+	UpdatedAt *time.Time          `json:"updatedAt,omitempty"`
+}
+
+// CounterpartyKind defines model for Counterparty.Kind.
+type CounterpartyKind string
+
+// CounterpartyStatus defines model for Counterparty.Status.
+type CounterpartyStatus string
+
+// CounterpartyWrite defines model for CounterpartyWrite.
+type CounterpartyWrite struct {
+	Address     string                `json:"address"`
+	ContactName string                `json:"contactName"`
+	Email       *string               `json:"email,omitempty"`
+	Inn         *string               `json:"inn,omitempty"`
+	Kind        CounterpartyWriteKind `json:"kind"`
+	Kpp         *string               `json:"kpp,omitempty"`
+	Name        string                `json:"name"`
+	Phone       *string               `json:"phone,omitempty"`
+
+	// Shared Только admin может публиковать запись в общем каталоге.
+	Shared *bool                    `json:"shared,omitempty"`
+	Status *CounterpartyWriteStatus `json:"status,omitempty"`
+}
+
+// CounterpartyWriteKind defines model for CounterpartyWrite.Kind.
+type CounterpartyWriteKind string
+
+// CounterpartyWriteStatus defines model for CounterpartyWrite.Status.
+type CounterpartyWriteStatus string
+
+// DeliveryComplete Для transportPolicyVersion=1 требуется предварительная delivery-receipt; имя берётся из неё. Поля здесь сохраняются для старых клиентов, противоречащее приёмке имя отклоняется.
 type DeliveryComplete struct {
 	Comment       *string `json:"comment,omitempty"`
 	RecipientName *string `json:"recipientName,omitempty"`
+}
+
+// DeliveryReceiptCreate defines model for DeliveryReceiptCreate.
+type DeliveryReceiptCreate struct {
+	AssignmentId openapi_types.UUID `json:"assignmentId"`
+
+	// AuthorityBasis Основание приёмки со слов подтверждающего; система не проверяет доверенность или подпись.
+	AuthorityBasis string  `json:"authorityBasis"`
+	CargoCondition string  `json:"cargoCondition"`
+	Comment        *string `json:"comment,omitempty"`
+	PackageCount   int     `json:"packageCount"`
+
+	// ReceivedAt Не раньше arrive и не более чем на 5 минут в будущем; по умолчанию время сервера.
+	ReceivedAt    *time.Time `json:"receivedAt,omitempty"`
+	RecipientName string     `json:"recipientName"`
+	RecipientRole string     `json:"recipientRole"`
+	SealNumber    *string    `json:"sealNumber,omitempty"`
 }
 
 // DocumentSummary defines model for DocumentSummary.
@@ -692,8 +853,12 @@ type Order struct {
 	PickupTo               *time.Time          `json:"pickupTo,omitempty"`
 	Status                 *OrderStatus        `json:"status,omitempty"`
 	TotalPrice             *float32            `json:"totalPrice,omitempty"`
-	VolumeM3               *float32            `json:"volumeM3,omitempty"`
-	WeightKg               *float32            `json:"weightKg,omitempty"`
+	TransportDetails       *TransportDetails   `json:"transportDetails,omitempty"`
+
+	// TransportPolicyVersion 0 для прежнего порядка; 1 требует реквизиты перед submit и приёмку перед complete.
+	TransportPolicyVersion *int     `json:"transportPolicyVersion,omitempty"`
+	VolumeM3               *float32 `json:"volumeM3,omitempty"`
+	WeightKg               *float32 `json:"weightKg,omitempty"`
 }
 
 // OrderStatus defines model for Order.Status.
@@ -781,6 +946,35 @@ type RegisterRequest struct {
 	FullName string              `json:"fullName"`
 	Password string              `json:"password"`
 }
+
+// TransportDetails defines model for TransportDetails.
+type TransportDetails struct {
+	BasisDate        *openapi_types.Date `json:"basisDate,omitempty"`
+	BasisNumber      *string             `json:"basisNumber,omitempty"`
+	BasisType        *string             `json:"basisType,omitempty"`
+	Carrier          *Counterparty       `json:"carrier,omitempty"`
+	PackageCount     *int                `json:"packageCount,omitempty"`
+	Recipient        *Counterparty       `json:"recipient,omitempty"`
+	RecordedAt       *time.Time          `json:"recordedAt,omitempty"`
+	RecordedByUserId *openapi_types.UUID `json:"recordedByUserId,omitempty"`
+	Sender           *Counterparty       `json:"sender,omitempty"`
+	Terms            *string             `json:"terms,omitempty"`
+}
+
+// TransportDetailsWrite defines model for TransportDetailsWrite.
+type TransportDetailsWrite struct {
+	BasisDate    openapi_types.Date             `json:"basisDate"`
+	BasisNumber  string                         `json:"basisNumber"`
+	BasisType    TransportDetailsWriteBasisType `json:"basisType"`
+	CarrierId    openapi_types.UUID             `json:"carrierId"`
+	PackageCount int                            `json:"packageCount"`
+	RecipientId  openapi_types.UUID             `json:"recipientId"`
+	SenderId     openapi_types.UUID             `json:"senderId"`
+	Terms        *string                        `json:"terms,omitempty"`
+}
+
+// TransportDetailsWriteBasisType defines model for TransportDetailsWrite.BasisType.
+type TransportDetailsWriteBasisType string
 
 // TripHandoverCreate defines model for TripHandoverCreate.
 type TripHandoverCreate struct {
@@ -899,23 +1093,27 @@ type WarehouseOperationCreateOperationType string
 
 // WarehouseQueueItem defines model for WarehouseQueueItem.
 type WarehouseQueueItem struct {
-	AssignedAt             *time.Time                        `json:"assignedAt,omitempty"`
-	CargoDescription       *string                           `json:"cargoDescription,omitempty"`
-	CreatedAt              *time.Time                        `json:"createdAt,omitempty"`
-	CreatedById            *openapi_types.UUID               `json:"createdById,omitempty"`
-	DeliveredAt            *time.Time                        `json:"deliveredAt,omitempty"`
-	DestinationAddress     *string                           `json:"destinationAddress,omitempty"`
-	DestinationWarehouseId *openapi_types.UUID               `json:"destinationWarehouseId,omitempty"`
-	DriverId               *openapi_types.UUID               `json:"driverId,omitempty"`
-	Id                     *openapi_types.UUID               `json:"id,omitempty"`
-	ManagerId              *openapi_types.UUID               `json:"managerId,omitempty"`
-	OpenIncidentCount      *int                              `json:"openIncidentCount,omitempty"`
-	OriginAddress          *string                           `json:"originAddress,omitempty"`
-	OriginWarehouseId      *openapi_types.UUID               `json:"originWarehouseId,omitempty"`
-	PickupFrom             *time.Time                        `json:"pickupFrom,omitempty"`
-	PickupTo               *time.Time                        `json:"pickupTo,omitempty"`
-	Status                 *WarehouseQueueItemStatus         `json:"status,omitempty"`
-	TotalPrice             *float32                          `json:"totalPrice,omitempty"`
+	AssignedAt             *time.Time                `json:"assignedAt,omitempty"`
+	CargoDescription       *string                   `json:"cargoDescription,omitempty"`
+	CreatedAt              *time.Time                `json:"createdAt,omitempty"`
+	CreatedById            *openapi_types.UUID       `json:"createdById,omitempty"`
+	DeliveredAt            *time.Time                `json:"deliveredAt,omitempty"`
+	DestinationAddress     *string                   `json:"destinationAddress,omitempty"`
+	DestinationWarehouseId *openapi_types.UUID       `json:"destinationWarehouseId,omitempty"`
+	DriverId               *openapi_types.UUID       `json:"driverId,omitempty"`
+	Id                     *openapi_types.UUID       `json:"id,omitempty"`
+	ManagerId              *openapi_types.UUID       `json:"managerId,omitempty"`
+	OpenIncidentCount      *int                      `json:"openIncidentCount,omitempty"`
+	OriginAddress          *string                   `json:"originAddress,omitempty"`
+	OriginWarehouseId      *openapi_types.UUID       `json:"originWarehouseId,omitempty"`
+	PickupFrom             *time.Time                `json:"pickupFrom,omitempty"`
+	PickupTo               *time.Time                `json:"pickupTo,omitempty"`
+	Status                 *WarehouseQueueItemStatus `json:"status,omitempty"`
+	TotalPrice             *float32                  `json:"totalPrice,omitempty"`
+	TransportDetails       *TransportDetails         `json:"transportDetails,omitempty"`
+
+	// TransportPolicyVersion 0 для прежнего порядка; 1 требует реквизиты перед submit и приёмку перед complete.
+	TransportPolicyVersion *int                              `json:"transportPolicyVersion,omitempty"`
 	VolumeM3               *float32                          `json:"volumeM3,omitempty"`
 	WarehouseStage         *WarehouseQueueItemWarehouseStage `json:"warehouseStage,omitempty"`
 	WeightKg               *float32                          `json:"weightKg,omitempty"`
@@ -948,6 +1146,13 @@ type ListAssignmentsParams struct {
 
 // ListAssignmentsParamsStatus defines parameters for ListAssignments.
 type ListAssignmentsParamsStatus string
+
+// ListCounterpartiesParams defines parameters for ListCounterparties.
+type ListCounterpartiesParams struct {
+	Limit           *int  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset          *int  `form:"offset,omitempty" json:"offset,omitempty"`
+	IncludeArchived *bool `form:"includeArchived,omitempty" json:"includeArchived,omitempty"`
+}
 
 // ListInboxDocumentsParams defines parameters for ListInboxDocuments.
 type ListInboxDocumentsParams struct {
@@ -1002,6 +1207,12 @@ type CompleteAssignmentJSONRequestBody = DeliveryComplete
 // RejectAssignmentJSONRequestBody defines body for RejectAssignment for application/json ContentType.
 type RejectAssignmentJSONRequestBody = AssignmentReject
 
+// CreateCounterpartyJSONRequestBody defines body for CreateCounterparty for application/json ContentType.
+type CreateCounterpartyJSONRequestBody = CounterpartyWrite
+
+// UpdateCounterpartyJSONRequestBody defines body for UpdateCounterparty for application/json ContentType.
+type UpdateCounterpartyJSONRequestBody = CounterpartyWrite
+
 // ResolveOrderIncidentJSONRequestBody defines body for ResolveOrderIncident for application/json ContentType.
 type ResolveOrderIncidentJSONRequestBody = OrderIncidentResolve
 
@@ -1017,11 +1228,17 @@ type CreateAssignmentJSONRequestBody = AssignmentCreate
 // CancelOrderJSONRequestBody defines body for CancelOrder for application/json ContentType.
 type CancelOrderJSONRequestBody = OrderCancel
 
+// CreateDeliveryReceiptJSONRequestBody defines body for CreateDeliveryReceipt for application/json ContentType.
+type CreateDeliveryReceiptJSONRequestBody = DeliveryReceiptCreate
+
 // CreateTripHandoverJSONRequestBody defines body for CreateTripHandover for application/json ContentType.
 type CreateTripHandoverJSONRequestBody = TripHandoverCreate
 
 // CreateOrderIncidentJSONRequestBody defines body for CreateOrderIncident for application/json ContentType.
 type CreateOrderIncidentJSONRequestBody = OrderIncidentCreate
+
+// SetTransportDetailsJSONRequestBody defines body for SetTransportDetails for application/json ContentType.
+type SetTransportDetailsJSONRequestBody = TransportDetailsWrite
 
 // CreateWarehouseOperationJSONRequestBody defines body for CreateWarehouseOperation for application/json ContentType.
 type CreateWarehouseOperationJSONRequestBody = WarehouseOperationCreate
@@ -1088,6 +1305,18 @@ type ServerInterface interface {
 	// Начать перевозку
 	// (POST /api/v1/assignments/{id}/start)
 	StartAssignment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Свой каталог контрагентов и общие записи admin
+	// (GET /api/v1/counterparties)
+	ListCounterparties(w http.ResponseWriter, r *http.Request, params ListCounterpartiesParams)
+	// Создать контрагента в своём каталоге
+	// (POST /api/v1/counterparties)
+	CreateCounterparty(w http.ResponseWriter, r *http.Request)
+	// Получить доступного контрагента
+	// (GET /api/v1/counterparties/{id})
+	GetCounterparty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Заменить реквизиты или архивировать контрагента; снимки заказов сохраняются
+	// (PUT /api/v1/counterparties/{id})
+	UpdateCounterparty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Документы в личном ящике
 	// (GET /api/v1/documents)
 	ListInboxDocuments(w http.ResponseWriter, r *http.Request, params ListInboxDocumentsParams)
@@ -1127,6 +1356,12 @@ type ServerInterface interface {
 	// Отменить заказ
 	// (POST /api/v1/orders/{id}/cancel)
 	CancelOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Посмотреть неизменяемую запись фактической приёмки
+	// (GET /api/v1/orders/{id}/delivery-receipt)
+	GetDeliveryReceipt(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Зафиксировать фактическую приёмку после arrive
+	// (POST /api/v1/orders/{id}/delivery-receipt)
+	CreateDeliveryReceipt(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Текущие рекомендации для менеджера
 	// (GET /api/v1/orders/{id}/dispatch-recommendations)
 	GetDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1148,6 +1383,9 @@ type ServerInterface interface {
 	// Подготовить заказ к диспетчеризации
 	// (POST /api/v1/orders/{id}/submit)
 	SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Сохранить снимок сторон и основания перевозки в черновике
+	// (PUT /api/v1/orders/{id}/transport-details)
+	SetTransportDetails(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Журнал складских операций заказа
 	// (GET /api/v1/orders/{id}/warehouse-operations)
 	ListOrderWarehouseOperations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1313,6 +1551,30 @@ func (_ Unimplemented) StartAssignment(w http.ResponseWriter, r *http.Request, i
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Свой каталог контрагентов и общие записи admin
+// (GET /api/v1/counterparties)
+func (_ Unimplemented) ListCounterparties(w http.ResponseWriter, r *http.Request, params ListCounterpartiesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Создать контрагента в своём каталоге
+// (POST /api/v1/counterparties)
+func (_ Unimplemented) CreateCounterparty(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Получить доступного контрагента
+// (GET /api/v1/counterparties/{id})
+func (_ Unimplemented) GetCounterparty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Заменить реквизиты или архивировать контрагента; снимки заказов сохраняются
+// (PUT /api/v1/counterparties/{id})
+func (_ Unimplemented) UpdateCounterparty(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Документы в личном ящике
 // (GET /api/v1/documents)
 func (_ Unimplemented) ListInboxDocuments(w http.ResponseWriter, r *http.Request, params ListInboxDocumentsParams) {
@@ -1391,6 +1653,18 @@ func (_ Unimplemented) CancelOrder(w http.ResponseWriter, r *http.Request, id op
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Посмотреть неизменяемую запись фактической приёмки
+// (GET /api/v1/orders/{id}/delivery-receipt)
+func (_ Unimplemented) GetDeliveryReceipt(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Зафиксировать фактическую приёмку после arrive
+// (POST /api/v1/orders/{id}/delivery-receipt)
+func (_ Unimplemented) CreateDeliveryReceipt(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Текущие рекомендации для менеджера
 // (GET /api/v1/orders/{id}/dispatch-recommendations)
 func (_ Unimplemented) GetDispatchRecommendations(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
@@ -1430,6 +1704,12 @@ func (_ Unimplemented) CreateOrderIncident(w http.ResponseWriter, r *http.Reques
 // Подготовить заказ к диспетчеризации
 // (POST /api/v1/orders/{id}/submit)
 func (_ Unimplemented) SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Сохранить снимок сторон и основания перевозки в черновике
+// (PUT /api/v1/orders/{id}/transport-details)
+func (_ Unimplemented) SetTransportDetails(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1845,6 +2125,113 @@ func (siw *ServerInterfaceWrapper) StartAssignment(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListCounterparties operation middleware
+func (siw *ServerInterfaceWrapper) ListCounterparties(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCounterpartiesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "offset", r.URL.Query(), &params.Offset, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "includeArchived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "includeArchived", r.URL.Query(), &params.IncludeArchived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeArchived", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCounterparties(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCounterparty operation middleware
+func (siw *ServerInterfaceWrapper) CreateCounterparty(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCounterparty(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCounterparty operation middleware
+func (siw *ServerInterfaceWrapper) GetCounterparty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCounterparty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCounterparty operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCounterparty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCounterparty(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListInboxDocuments operation middleware
 func (siw *ServerInterfaceWrapper) ListInboxDocuments(w http.ResponseWriter, r *http.Request) {
 
@@ -2197,6 +2584,56 @@ func (siw *ServerInterfaceWrapper) CancelOrder(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetDeliveryReceipt operation middleware
+func (siw *ServerInterfaceWrapper) GetDeliveryReceipt(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDeliveryReceipt(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateDeliveryReceipt operation middleware
+func (siw *ServerInterfaceWrapper) CreateDeliveryReceipt(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateDeliveryReceipt(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetDispatchRecommendations operation middleware
 func (siw *ServerInterfaceWrapper) GetDispatchRecommendations(w http.ResponseWriter, r *http.Request) {
 
@@ -2375,6 +2812,31 @@ func (siw *ServerInterfaceWrapper) SubmitOrder(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SubmitOrder(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetTransportDetails operation middleware
+func (siw *ServerInterfaceWrapper) SetTransportDetails(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetTransportDetails(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3428,6 +3890,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/assignments/{id}/start", wrapper.StartAssignment)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/counterparties", wrapper.ListCounterparties)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/counterparties", wrapper.CreateCounterparty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/counterparties/{id}", wrapper.GetCounterparty)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/counterparties/{id}", wrapper.UpdateCounterparty)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/documents", wrapper.ListInboxDocuments)
 	})
 	r.Group(func(r chi.Router) {
@@ -3467,6 +3941,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/cancel", wrapper.CancelOrder)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/delivery-receipt", wrapper.GetDeliveryReceipt)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/api/v1/orders/{id}/delivery-receipt", wrapper.CreateDeliveryReceipt)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/orders/{id}/dispatch-recommendations", wrapper.GetDispatchRecommendations)
 	})
 	r.Group(func(r chi.Router) {
@@ -3486,6 +3966,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/submit", wrapper.SubmitOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/api/v1/orders/{id}/transport-details", wrapper.SetTransportDetails)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/api/v1/orders/{id}/warehouse-operations", wrapper.ListOrderWarehouseOperations)

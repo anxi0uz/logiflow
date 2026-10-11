@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -24,11 +25,22 @@ func (s *OrderService) enqueueOperationalDocument(ctx context.Context, tx pgx.Tx
 		return nil
 	}
 	recipients := append([]uuid.UUID{*order.CreatedByID, actorID}, extraRecipients...)
+	receipt, err := storage.GetOne[models.DeliveryReceipt](ctx, tx, "delivery_receipts", func(b *sqlbuilder.SelectBuilder) { b.Where(b.EQ("order_id", order.ID)) })
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	transportFields, err := transportDocumentFields(order, receipt)
+	if err != nil {
+		return err
+	}
 	fields := []documentField{
 		{"Заказ", order.ID.String()}, {"Статус заказа", order.Status},
 		{"Адрес отправления", order.OriginAddress}, {"Адрес назначения", order.DestinationAddress},
 		{"Груз", order.CargoDescription}, {"Масса, кг", strconv.FormatFloat(order.WeightKg, 'f', 2, 64)},
 		{"Объем, м3", strconv.FormatFloat(order.VolumeM3, 'f', 2, 64)},
+	}
+	for _, field := range transportFields {
+		fields = append(fields, documentField(field))
 	}
 	if order.TotalPrice != nil {
 		fields = append(fields, documentField{"Расчетная стоимость, RUB", strconv.FormatFloat(*order.TotalPrice, 'f', 2, 64)})

@@ -9,6 +9,10 @@ type BusinessError struct {
 func (e *BusinessError) Error() string { return e.Code }
 
 var (
+	ErrCounterpartyArchived       = &BusinessError{Code: "COUNTERPARTY_ARCHIVED"}
+	ErrTransportDetailsRequired   = &BusinessError{Code: "TRANSPORT_DETAILS_REQUIRED"}
+	ErrDeliveryReceiptRequired    = &BusinessError{Code: "DELIVERY_RECEIPT_REQUIRED"}
+	ErrDeliveryReceiptConflict    = &BusinessError{Code: "DELIVERY_RECEIPT_CONFLICT"}
 	ErrIncidentOpen               = &BusinessError{Code: "INCIDENT_OPEN"}
 	ErrIncidentStale              = &BusinessError{Code: "INCIDENT_STALE"}
 	ErrIncidentResolutionInvalid  = &BusinessError{Code: "INCIDENT_RESOLUTION_INVALID"}
