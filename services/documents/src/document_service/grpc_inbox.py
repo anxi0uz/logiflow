@@ -1,10 +1,10 @@
 from uuid import UUID
 
 import grpc
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from document_service.models import Document
+from document_service.models import Document, DocumentRecipient
 from logiflow.documents.v1 import documents_pb2, documents_pb2_grpc
 
 
@@ -23,7 +23,17 @@ class DocumentInbox(documents_pb2_grpc.DocumentInboxServicer):
         async with self.sessions() as db:
             rows = await db.scalars(
                 select(Document)
-                .where(Document.user_id == user_id)
+                .where(
+                    or_(
+                        Document.user_id == user_id,
+                        select(DocumentRecipient.document_id)
+                        .where(
+                            DocumentRecipient.document_id == Document.id,
+                            DocumentRecipient.user_id == user_id,
+                        )
+                        .exists(),
+                    )
+                )
                 .order_by(Document.created_at.desc(), Document.id.desc())
                 .offset(offset)
                 .limit(limit)
@@ -51,7 +61,11 @@ class DocumentInbox(documents_pb2_grpc.DocumentInboxServicer):
 
         async with self.sessions() as db:
             document = await db.get(Document, document_id)
-            if document is None or document.user_id != user_id:
+            allowed = document is not None and (
+                document.user_id == user_id
+                or await db.get(DocumentRecipient, (document_id, user_id)) is not None
+            )
+            if not allowed:
                 await context.abort(grpc.StatusCode.NOT_FOUND, "document not found")
             for offset in range(0, len(document.pdf_bytes), 64 * 1024):
                 yield documents_pb2.DocumentChunk(

@@ -10,22 +10,36 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from document_service.models import OutboxEvent
-from document_service.modules.documents.schemas import DeliveryCompleted
+from document_service.modules.documents.operational import accept_operational_document
+from document_service.modules.documents.schemas import (
+    DeliveryCompleted,
+    DocumentRequested,
+)
 from document_service.modules.documents.service import accept_delivery
 
 log = structlog.get_logger(component="documents.events")
 
 
 async def process_delivery_message(message, js, sessions, font_path):
+    consumer = (
+        "operational-document-generator"
+        if message.subject == "document.requested.v1"
+        else "document-generator"
+    )
     try:
-        event = DeliveryCompleted.model_validate_json(message.data)
+        schema = (
+            DocumentRequested
+            if message.subject == "document.requested.v1"
+            else DeliveryCompleted
+        )
+        event = schema.model_validate_json(message.data)
     except ValidationError as exc:
         metadata = message.metadata
         diagnostic = {
             "source_stream": metadata.stream,
             "source_sequence": metadata.sequence.stream,
             "source_subject": message.subject,
-            "consumer": "document-generator",
+            "consumer": consumer,
             "reason": json.dumps(
                 exc.errors(include_input=False, include_url=False), default=str
             ),
@@ -35,7 +49,7 @@ async def process_delivery_message(message, js, sessions, font_path):
             "invalid.events.v1",
             json.dumps(diagnostic).encode(),
             headers={
-                "Nats-Msg-Id": f"invalid:{metadata.stream}:{metadata.sequence.stream}:document-generator"
+                "Nats-Msg-Id": f"invalid:{metadata.stream}:{metadata.sequence.stream}:{consumer}"
             },
         )
         log.error(
@@ -46,7 +60,10 @@ async def process_delivery_message(message, js, sessions, font_path):
         return
 
     async with sessions() as db:
-        await accept_delivery(db, event, font_path)
+        if isinstance(event, DocumentRequested):
+            await accept_operational_document(db, event, font_path)
+        else:
+            await accept_delivery(db, event, font_path)
     await message.ack()
 
 
@@ -54,9 +71,14 @@ async def consume_deliveries(
     js: JetStreamContext,
     sessions: async_sessionmaker[AsyncSession],
     font_path: str,
+    subject: str = "delivery.completed.v1",
 ) -> None:
     subscription = await js.pull_subscribe(
-        "delivery.completed.v1", durable="document-generator", stream="LOGIFLOW_EVENTS"
+        subject,
+        durable="document-generator"
+        if subject == "delivery.completed.v1"
+        else "operational-document-generator",
+        stream="LOGIFLOW_EVENTS",
     )
     while True:
         try:

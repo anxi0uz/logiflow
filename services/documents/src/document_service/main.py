@@ -25,11 +25,21 @@ async def run() -> None:
         try:
             await js.add_stream(
                 name="LOGIFLOW_EVENTS",
-                subjects=["delivery.completed.v1", "document.ready.v1"],
+                subjects=[
+                    "delivery.completed.v1",
+                    "document.ready.v1",
+                    "document.requested.v1",
+                    "dispatch.requested.v1",
+                    "dispatch.recommended.v1",
+                ],
             )
         except APIError:
             # Core may have created the stream at the same instant.
             await js.stream_info("LOGIFLOW_EVENTS")
+    stream = await js.stream_info("LOGIFLOW_EVENTS")
+    if "document.requested.v1" not in stream.config.subjects:
+        stream.config.subjects.append("document.requested.v1")
+        await js.update_stream(config=stream.config)
     try:
         await js.stream_info("LOGIFLOW_INVALID_EVENTS")
     except NotFoundError:
@@ -49,6 +59,12 @@ async def run() -> None:
     log.info("document_service_started", grpc_port=settings.grpc_port)
 
     workers = [
+        asyncio.create_task(
+            consume_deliveries(
+                js, session_factory, settings.font_path, "document.requested.v1"
+            ),
+            name="consume_operational_documents",
+        ),
         asyncio.create_task(
             consume_deliveries(js, session_factory, settings.font_path),
             name="consume_deliveries",

@@ -10,11 +10,13 @@ import (
 
 	"github.com/anxi0uz/logiflow/internal/api"
 	"github.com/anxi0uz/logiflow/internal/models"
+	"github.com/anxi0uz/logiflow/internal/services"
 	storage "github.com/anxi0uz/logiflow/pkg"
 	"github.com/anxi0uz/logiflow/pkg/geocode"
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/huandu/go-sqlbuilder"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (s *Server) ListWarehouses(w http.ResponseWriter, r *http.Request) {
@@ -160,6 +162,11 @@ func (s *Server) DeleteWarehouse(w http.ResponseWriter, r *http.Request, slug st
 	if err := storage.Delete[models.Warehouse](ctx, "warehouses", s.DB, func(sb *sqlbuilder.DeleteBuilder) {
 		sb.Where(sb.EQ("slug", slug))
 	}); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			s.writeOrderServiceError(w, r, services.ErrWarehouseInUse)
+			return
+		}
 		slog.ErrorContext(ctx, "Error while deleting warehoue", slog.String("slug", slug), slog.String("error", err.Error()))
 		s.JSON(w, r, http.StatusInternalServerError, MsgInternalError, RespError)
 		return

@@ -27,6 +27,17 @@ type OrderService struct {
 	routePlanner routing.Planner
 }
 type OrderServicer interface {
+	CreateOrderIncident(context.Context, uuid.UUID, uuid.UUID, string, api.OrderIncidentCreate) (*models.OrderIncident, error)
+	ListOrderIncidents(context.Context, uuid.UUID, uuid.UUID, string) ([]models.OrderIncident, error)
+	ResolveOrderIncident(context.Context, uuid.UUID, uuid.UUID, string, api.OrderIncidentResolve) (*models.OrderIncident, error)
+
+	CreateWarehouseOperation(context.Context, uuid.UUID, uuid.UUID, string, api.WarehouseOperationCreate) (*models.WarehouseOperation, error)
+	ListOrderWarehouseOperations(context.Context, uuid.UUID, uuid.UUID, string) ([]models.WarehouseOperation, error)
+	ListWarehouseQueue(context.Context, uuid.UUID, uuid.UUID, string, api.ListWarehouseQueueParams) ([]models.WarehouseQueueItem, error)
+
+	CreateTripHandover(context.Context, uuid.UUID, uuid.UUID, string, api.TripHandoverCreate) (*models.TripHandover, error)
+	ListTripHandovers(context.Context, uuid.UUID, uuid.UUID, string) ([]models.TripHandover, error)
+	UpdateTripHandover(context.Context, uuid.UUID, uuid.UUID, string, string) (*models.TripHandover, error)
 	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
 	GetOrder(ctx context.Context, id uuid.UUID, userID uuid.UUID, role string) (*models.Order, error)
@@ -78,7 +89,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 			return nil, ErrForbidden
 		}
 	}
-	if (req.OriginWarehouseId == nil && (req.OriginAddress == nil || *req.OriginAddress == "")) || req.DestinationAddress == "" ||
+	if (req.OriginWarehouseId == nil && (req.OriginAddress == nil || *req.OriginAddress == "")) || (req.DestinationWarehouseId == nil && req.DestinationAddress == "") ||
 		(req.WeightKg != nil && *req.WeightKg < 0) || (req.VolumeM3 != nil && *req.VolumeM3 < 0) ||
 		(req.PickupFrom != nil && req.PickupTo != nil && !req.PickupFrom.Before(*req.PickupTo)) {
 		return nil, ErrInvalidOrderInput
@@ -94,9 +105,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		if err != nil {
 			return nil, err
 		}
+		if warehouse.Status != "active" {
+			return nil, ErrWarehouseInactive
+		}
 		if warehouse.Latitude == nil || warehouse.Longitude == nil {
 			return nil, ErrInvalidOrderInput
 		}
+		origin.Address = warehouse.Address
 		origin.Coordinates = &routing.Coordinates{Latitude: *warehouse.Latitude, Longitude: *warehouse.Longitude}
 	}
 	destination := routing.Endpoint{Address: req.DestinationAddress}
@@ -107,9 +122,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 		if err != nil {
 			return nil, err
 		}
+		if warehouse.Status != "active" {
+			return nil, ErrWarehouseInactive
+		}
 		if warehouse.Latitude == nil || warehouse.Longitude == nil {
 			return nil, ErrInvalidOrderInput
 		}
+		destination.Address = warehouse.Address
 		destination.Coordinates = &routing.Coordinates{Latitude: *warehouse.Latitude, Longitude: *warehouse.Longitude}
 	}
 	estimate, err := s.routePlanner.Plan(ctx, origin, destination)
@@ -128,18 +147,17 @@ func (s *OrderService) CreateOrder(ctx context.Context, req api.OrderCreate, use
 
 	orderID := uuid.New()
 	order := models.Order{
-		ID:                 orderID,
-		CreatedByID:        &userID,
-		OriginWarehouseID:  req.OriginWarehouseId,
-		DestinationAddress: req.DestinationAddress,
-		Status:             models.OrderDraft,
-		TotalPrice:         &price,
-		CreatedAt:          time.Now(),
-		PickupFrom:         req.PickupFrom,
-		PickupTo:           req.PickupTo,
-	}
-	if req.OriginAddress != nil && *req.OriginAddress != "" {
-		order.OriginAddress = *req.OriginAddress
+		ID:                     orderID,
+		CreatedByID:            &userID,
+		OriginWarehouseID:      req.OriginWarehouseId,
+		DestinationWarehouseID: req.DestinationWarehouseId,
+		DestinationAddress:     destination.Address,
+		OriginAddress:          origin.Address,
+		Status:                 models.OrderDraft,
+		TotalPrice:             &price,
+		CreatedAt:              time.Now(),
+		PickupFrom:             req.PickupFrom,
+		PickupTo:               req.PickupTo,
 	}
 	if req.CargoDescription != nil {
 		order.CargoDescription = *req.CargoDescription
@@ -215,9 +233,9 @@ func (s *OrderService) ListOrders(ctx context.Context, userID uuid.UUID, role st
 		case "client":
 			sb.Where(sb.EQ("created_by_id", userID))
 		case "driver":
-			sb.Where(sb.EQ("driver_id", driverID))
+			sb.Where(sb.Or(sb.EQ("driver_id", driverID), "id IN (SELECT order_id FROM assignments WHERE driver_id = "+sb.Var(driverID)+" AND started_at IS NOT NULL)"))
 		case "manager":
-			sb.Where(sb.EQ("origin_warehouse_id", warehouseID))
+			sb.Where(sb.Or(sb.EQ("origin_warehouse_id", warehouseID), sb.EQ("destination_warehouse_id", warehouseID)))
 		}
 		if params.Status != nil {
 			sb.Where(sb.EQ("status", *params.Status))
@@ -252,7 +270,7 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 		if err != nil {
 			return nil, err
 		}
-		if order.OriginWarehouseID == nil || *order.OriginWarehouseID != warehouseID {
+		if !orderTouchesWarehouse(order, warehouseID) {
 			return nil, ErrForbidden
 		}
 	}
@@ -267,11 +285,25 @@ func (s *OrderService) GetOrder(ctx context.Context, id uuid.UUID, userID uuid.U
 				sb.EQ("driver_id", driver.ID),
 				sb.Or(
 					sb.In("status", models.AssignmentAccepted, models.AssignmentActive, models.AssignmentCompleted),
+					sb.And(sb.EQ("status", models.AssignmentReleased), sb.IsNotNull("started_at")),
 					sb.And(sb.EQ("status", models.AssignmentPendingAcceptance), sb.GT("offer_expires_at", time.Now())),
 				),
 			).Limit(1)
 		}); err != nil {
-			return nil, ErrForbidden
+			if !errors.Is(err, storage.ErrNotFound) {
+				return nil, err
+			}
+			var invited bool
+			err = s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM trip_handovers h
+                JOIN assignments a ON a.id=h.previous_assignment_id
+                WHERE h.order_id=$1 AND h.driver_id=$2 AND h.status='pending'
+                AND h.expires_at>NOW() AND a.status='active')`, id, driver.ID).Scan(&invited)
+			if err != nil {
+				return nil, err
+			}
+			if !invited || order.Status != models.OrderInTransit {
+				return nil, ErrForbidden
+			}
 		}
 	}
 	return order, nil
@@ -384,7 +416,7 @@ func (s *OrderService) ListAssignments(ctx context.Context, userID uuid.UUID, ro
 			sb.Where(sb.EQ("driver_id", driverID))
 		}
 		if role == "manager" {
-			sb.Where("order_id IN (SELECT id FROM orders WHERE origin_warehouse_id = " + sb.Var(warehouseID) + ")")
+			sb.Where("order_id IN (SELECT id FROM orders WHERE origin_warehouse_id = " + sb.Var(warehouseID) + " OR destination_warehouse_id = " + sb.Var(warehouseID) + ")")
 		}
 		if params.Status != nil {
 			sb.Where(sb.EQ("status", *params.Status))
@@ -421,7 +453,7 @@ func (s *OrderService) GetOrdersReport(ctx context.Context, userID uuid.UUID, ro
 	}
 	orders, err := storage.GetAll[models.Order](ctx, "orders", s.db, func(sb *sqlbuilder.SelectBuilder) {
 		if role == "manager" {
-			sb.Where(sb.EQ("origin_warehouse_id", warehouseID))
+			sb.Where(sb.Or(sb.EQ("origin_warehouse_id", warehouseID), sb.EQ("destination_warehouse_id", warehouseID)))
 		}
 		if params.Status != nil {
 			sb.Where(sb.EQ("status", string(*params.Status)))
@@ -473,7 +505,7 @@ func (s *OrderService) GetDashboard(ctx context.Context, userID uuid.UUID, role 
                 COALESCE(SUM(total_price) FILTER (WHERE status = 'completed'
                     AND created_at >= date_trunc('month', NOW())), 0)                    AS revenue_this_month
             FROM orders
-            WHERE ($1::uuid IS NULL OR origin_warehouse_id = $1)
+            WHERE ($1::uuid IS NULL OR origin_warehouse_id = $1 OR destination_warehouse_id = $1)
         `, warehouseID)
 		return row.Scan(
 			&report.Orders.Total,
@@ -497,7 +529,7 @@ func (s *OrderService) GetDashboard(ctx context.Context, userID uuid.UUID, role 
                 COUNT(o.id) FILTER (WHERE o.status = 'completed') AS completed_orders
             FROM drivers d
             JOIN users u ON u.id = d.user_id
-            LEFT JOIN orders o ON o.driver_id = d.id AND ($1::uuid IS NULL OR o.origin_warehouse_id = $1)
+            LEFT JOIN orders o ON o.driver_id = d.id AND ($1::uuid IS NULL OR o.origin_warehouse_id = $1 OR o.destination_warehouse_id = $1)
             WHERE $1::uuid IS NULL OR o.id IS NOT NULL
             GROUP BY d.id, u.full_name, d.status, d.rating
             ORDER BY completed_orders DESC

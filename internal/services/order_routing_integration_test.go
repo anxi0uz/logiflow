@@ -54,8 +54,8 @@ func TestCreateOrderSeparatesRouteEstimatePriceAndPersistence(t *testing.T) {
 	}
 	originLat, originLon, destinationLat, destinationLon := 60.0, 30.0, 61.0, 31.0
 	warehouses := []models.Warehouse{
-		{ID: uuid.New(), Name: "Origin", Address: "Origin address", City: "Test", Latitude: &originLat, Longitude: &originLon, CreatedAt: time.Now()},
-		{ID: uuid.New(), Name: "Destination", Address: "Destination address", City: "Test", Latitude: &destinationLat, Longitude: &destinationLon, CreatedAt: time.Now()},
+		{ID: uuid.New(), Status: "active", Name: "Origin", Address: "Origin address", City: "Test", Latitude: &originLat, Longitude: &originLon, CreatedAt: time.Now()},
+		{ID: uuid.New(), Status: "active", Name: "Destination", Address: "Destination address", City: "Test", Latitude: &destinationLat, Longitude: &destinationLon, CreatedAt: time.Now()},
 	}
 	for i := range warehouses {
 		warehouses[i].Slug = "routing-" + warehouses[i].ID.String()
@@ -83,7 +83,7 @@ func TestCreateOrderSeparatesRouteEstimatePriceAndPersistence(t *testing.T) {
 	}}
 	service := NewOrderService(pool, cfg)
 	service.routePlanner = planner
-	incompleteWarehouse := models.Warehouse{ID: uuid.New(), Name: "No coordinates", Address: "Unknown", City: "Test", Slug: "routing-incomplete-" + uuid.NewString(), CreatedAt: time.Now()}
+	incompleteWarehouse := models.Warehouse{ID: uuid.New(), Status: "active", Name: "No coordinates", Address: "Unknown", City: "Test", Slug: "routing-incomplete-" + uuid.NewString(), CreatedAt: time.Now()}
 	if err := storage.Create(ctx, "warehouses", incompleteWarehouse, pool); err != nil {
 		t.Fatalf("seed warehouse without coordinates: %v", err)
 	}
@@ -96,12 +96,15 @@ func TestCreateOrderSeparatesRouteEstimatePriceAndPersistence(t *testing.T) {
 	weight, volume := float32(10), float32(2)
 	result, err := service.CreateOrder(ctx, api.OrderCreate{
 		OriginWarehouseId: &warehouses[0].ID, DestinationWarehouseId: &warehouses[1].ID,
-		DestinationAddress: "Destination address", WeightKg: &weight, VolumeM3: &volume,
+		DestinationAddress: "Untrusted address", WeightKg: &weight, VolumeM3: &volume,
 	}, user.ID, "client")
 	if err != nil {
 		t.Fatalf("create order: %v", err)
 	}
 	orderID = result.Order.ID
+	if result.Order.DestinationWarehouseID == nil || *result.Order.DestinationWarehouseID != warehouses[1].ID || result.Order.OriginAddress != "Origin address" || result.Order.DestinationAddress != "Destination address" {
+		t.Fatalf("warehouse endpoints not persisted: %+v", result.Order)
+	}
 	if planner.origin.Coordinates == nil || *planner.origin.Coordinates != (routing.Coordinates{Latitude: 60, Longitude: 30}) ||
 		planner.destination.Coordinates == nil || *planner.destination.Coordinates != (routing.Coordinates{Latitude: 61, Longitude: 31}) {
 		t.Fatalf("warehouse coordinates not passed to route planner: %+v %+v", planner.origin, planner.destination)

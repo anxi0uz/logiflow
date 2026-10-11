@@ -1,12 +1,11 @@
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import uuid4
 
 from document_service.modules.documents.schemas import DeliveryCompleted
 from document_service.modules.documents.service import render_delivery_confirmation
 
 
-def test_delivery_confirmation_is_a_pdf():
+def test_delivery_confirmation_is_a_pdf(font_path):
     event = DeliveryCompleted(
         event_id=uuid4(),
         order_id=uuid4(),
@@ -23,15 +22,7 @@ def test_delivery_confirmation_is_a_pdf():
         vehicle_id=uuid4(),
     )
 
-    font = next(
-        path
-        for path in (
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-            Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
-        )
-        if path.exists()
-    )
-    pdf = render_delivery_confirmation(event, str(font))
+    pdf = render_delivery_confirmation(event, font_path)
 
     assert pdf.startswith(b"%PDF-")
     assert len(pdf) > 2000
