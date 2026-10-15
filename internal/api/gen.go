@@ -339,6 +339,30 @@ func (e TransportDetailsWriteBasisType) Valid() bool {
 	}
 }
 
+// Defines values for TripHandoverStatus.
+const (
+	TripHandoverStatusCancelled TripHandoverStatus = "cancelled"
+	TripHandoverStatusCompleted TripHandoverStatus = "completed"
+	TripHandoverStatusExpired   TripHandoverStatus = "expired"
+	TripHandoverStatusPending   TripHandoverStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the TripHandoverStatus enum.
+func (e TripHandoverStatus) Valid() bool {
+	switch e {
+	case TripHandoverStatusCancelled:
+		return true
+	case TripHandoverStatusCompleted:
+		return true
+	case TripHandoverStatusExpired:
+		return true
+	case TripHandoverStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VehicleDocumentCreateType.
 const (
 	Registration VehicleDocumentCreateType = "registration"
@@ -641,31 +665,31 @@ func (e ListDriversParamsStatus) Valid() bool {
 
 // Defines values for GetOrdersReportParamsStatus.
 const (
-	GetOrdersReportParamsStatusArrived          GetOrdersReportParamsStatus = "arrived"
-	GetOrdersReportParamsStatusAssigned         GetOrdersReportParamsStatus = "assigned"
-	GetOrdersReportParamsStatusCancelled        GetOrdersReportParamsStatus = "cancelled"
-	GetOrdersReportParamsStatusCompleted        GetOrdersReportParamsStatus = "completed"
-	GetOrdersReportParamsStatusDraft            GetOrdersReportParamsStatus = "draft"
-	GetOrdersReportParamsStatusInTransit        GetOrdersReportParamsStatus = "in_transit"
-	GetOrdersReportParamsStatusReadyForDispatch GetOrdersReportParamsStatus = "ready_for_dispatch"
+	Arrived          GetOrdersReportParamsStatus = "arrived"
+	Assigned         GetOrdersReportParamsStatus = "assigned"
+	Cancelled        GetOrdersReportParamsStatus = "cancelled"
+	Completed        GetOrdersReportParamsStatus = "completed"
+	Draft            GetOrdersReportParamsStatus = "draft"
+	InTransit        GetOrdersReportParamsStatus = "in_transit"
+	ReadyForDispatch GetOrdersReportParamsStatus = "ready_for_dispatch"
 )
 
 // Valid indicates whether the value is a known member of the GetOrdersReportParamsStatus enum.
 func (e GetOrdersReportParamsStatus) Valid() bool {
 	switch e {
-	case GetOrdersReportParamsStatusArrived:
+	case Arrived:
 		return true
-	case GetOrdersReportParamsStatusAssigned:
+	case Assigned:
 		return true
-	case GetOrdersReportParamsStatusCancelled:
+	case Cancelled:
 		return true
-	case GetOrdersReportParamsStatusCompleted:
+	case Completed:
 		return true
-	case GetOrdersReportParamsStatusDraft:
+	case Draft:
 		return true
-	case GetOrdersReportParamsStatusInTransit:
+	case InTransit:
 		return true
-	case GetOrdersReportParamsStatusReadyForDispatch:
+	case ReadyForDispatch:
 		return true
 	default:
 		return false
@@ -940,6 +964,15 @@ type OrderIncidentResolve struct {
 // OrderIncidentResolveResolution defines model for OrderIncidentResolve.Resolution.
 type OrderIncidentResolveResolution string
 
+// OrderReferences Текущие названия только участников и ресурсов доступного заказа. Не заменяют неизменяемые снимки документов. Ключи словарей — UUID; значения — подписи для интерфейса, без email, телефонов и других данных профиля.
+type OrderReferences struct {
+	Assignments map[string]string `json:"assignments"`
+	Drivers     map[string]string `json:"drivers"`
+	Users       map[string]string `json:"users"`
+	Vehicles    map[string]string `json:"vehicles"`
+	Warehouses  map[string]string `json:"warehouses"`
+}
+
 // RegisterRequest defines model for RegisterRequest.
 type RegisterRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -975,6 +1008,29 @@ type TransportDetailsWrite struct {
 
 // TransportDetailsWriteBasisType defines model for TransportDetailsWrite.BasisType.
 type TransportDetailsWriteBasisType string
+
+// TripHandover defines model for TripHandover.
+type TripHandover struct {
+	CargoCondition       string              `json:"cargoCondition"`
+	CompletedAt          *time.Time          `json:"completedAt,omitempty"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	CreatedByUserId      *openapi_types.UUID `json:"createdByUserId,omitempty"`
+	DriverId             openapi_types.UUID  `json:"driverId"`
+	ExpiresAt            time.Time           `json:"expiresAt"`
+	Id                   openapi_types.UUID  `json:"id"`
+	Location             string              `json:"location"`
+	NextAssignmentId     *openapi_types.UUID `json:"nextAssignmentId,omitempty"`
+	OrderId              openapi_types.UUID  `json:"orderId"`
+	OutgoingConfirmedAt  *time.Time          `json:"outgoingConfirmedAt,omitempty"`
+	PlannedTo            time.Time           `json:"plannedTo"`
+	PreviousAssignmentId openapi_types.UUID  `json:"previousAssignmentId"`
+	Reason               string              `json:"reason"`
+	Status               TripHandoverStatus  `json:"status"`
+	VehicleId            openapi_types.UUID  `json:"vehicleId"`
+}
+
+// TripHandoverStatus defines model for TripHandover.Status.
+type TripHandoverStatus string
 
 // TripHandoverCreate defines model for TripHandoverCreate.
 type TripHandoverCreate struct {
@@ -1323,6 +1379,9 @@ type ServerInterface interface {
 	// Скачать документ из личного ящика
 	// (GET /api/v1/documents/{id}/download)
 	DownloadInboxDocument(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Собственные входящие передачи груза водителя
+	// (GET /api/v1/handovers/incoming)
+	ListIncomingTripHandovers(w http.ResponseWriter, r *http.Request)
 	// Принимающий водитель подтверждает прием груза и продолжает рейс
 	// (POST /api/v1/handovers/{id}/accept)
 	AcceptTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1380,6 +1439,9 @@ type ServerInterface interface {
 	// Сообщить о проблеме перевозки
 	// (POST /api/v1/orders/{id}/incidents)
 	CreateOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Имена участников и названия ресурсов карточки заказа
+	// (GET /api/v1/orders/{id}/references)
+	GetOrderReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Подготовить заказ к диспетчеризации
 	// (POST /api/v1/orders/{id}/submit)
 	SubmitOrder(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1587,6 +1649,12 @@ func (_ Unimplemented) DownloadInboxDocument(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Собственные входящие передачи груза водителя
+// (GET /api/v1/handovers/incoming)
+func (_ Unimplemented) ListIncomingTripHandovers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Принимающий водитель подтверждает прием груза и продолжает рейс
 // (POST /api/v1/handovers/{id}/accept)
 func (_ Unimplemented) AcceptTripHandover(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
@@ -1698,6 +1766,12 @@ func (_ Unimplemented) ListOrderIncidents(w http.ResponseWriter, r *http.Request
 // Сообщить о проблеме перевозки
 // (POST /api/v1/orders/{id}/incidents)
 func (_ Unimplemented) CreateOrderIncident(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Имена участников и названия ресурсов карточки заказа
+// (GET /api/v1/orders/{id}/references)
+func (_ Unimplemented) GetOrderReferences(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2292,6 +2366,26 @@ func (siw *ServerInterfaceWrapper) DownloadInboxDocument(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// ListIncomingTripHandovers operation middleware
+func (siw *ServerInterfaceWrapper) ListIncomingTripHandovers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListIncomingTripHandovers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AcceptTripHandover operation middleware
 func (siw *ServerInterfaceWrapper) AcceptTripHandover(w http.ResponseWriter, r *http.Request) {
 
@@ -2787,6 +2881,37 @@ func (siw *ServerInterfaceWrapper) CreateOrderIncident(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateOrderIncident(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOrderReferences operation middleware
+func (siw *ServerInterfaceWrapper) GetOrderReferences(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOrderReferences(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3908,6 +4033,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/api/v1/documents/{id}/download", wrapper.DownloadInboxDocument)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/handovers/incoming", wrapper.ListIncomingTripHandovers)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/handovers/{id}/accept", wrapper.AcceptTripHandover)
 	})
 	r.Group(func(r chi.Router) {
@@ -3963,6 +4091,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/incidents", wrapper.CreateOrderIncident)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/api/v1/orders/{id}/references", wrapper.GetOrderReferences)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/api/v1/orders/{id}/submit", wrapper.SubmitOrder)

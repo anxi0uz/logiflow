@@ -213,7 +213,7 @@ async def accept_delivery(
     db.add(document)
     await db.flush()
 
-    add_ready_event(db, document)
+    add_ready_event(db, document, event.recipients)
     await db.commit()
 
     log.info(

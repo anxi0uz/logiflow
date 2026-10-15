@@ -132,6 +132,22 @@ func (s *OrderService) CreateTripHandover(ctx context.Context, orderID, userID u
 	return &item, nil
 }
 
+// ListIncomingTripHandovers exposes invitations before the driver has an assignment.
+// Keep its scope aligned with the temporary invitation access in GetOrder.
+func (s *OrderService) ListIncomingTripHandovers(ctx context.Context, userID uuid.UUID, role string) ([]models.TripHandover, error) {
+	if role != "driver" {
+		return nil, ErrForbidden
+	}
+	return storage.GetAll[models.TripHandover](ctx, "trip_handovers", s.db, func(b *sqlbuilder.SelectBuilder) {
+		b.Where(
+			"driver_id IN (SELECT id FROM drivers WHERE user_id = "+b.Var(userID)+")",
+			b.EQ("status", "pending"), b.GreaterThan("expires_at", time.Now()),
+			"order_id IN (SELECT id FROM orders WHERE status = 'in_transit')",
+			"previous_assignment_id IN (SELECT id FROM assignments WHERE status = 'active')",
+		).OrderBy("created_at", "id")
+	})
+}
+
 func (s *OrderService) ListTripHandovers(ctx context.Context, orderID, userID uuid.UUID, role string) ([]models.TripHandover, error) {
 	if _, err := s.GetOrder(ctx, orderID, userID, role); err != nil {
 		return nil, err
