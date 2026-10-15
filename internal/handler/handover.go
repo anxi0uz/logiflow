@@ -27,6 +27,20 @@ func (s *Server) CreateTripHandover(w http.ResponseWriter, r *http.Request, id u
 	s.JSON(w, r, http.StatusCreated, item, "handover")
 }
 
+func (s *Server) ListIncomingTripHandovers(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(UserKey).(*Claims)
+	if !ok {
+		s.JSON(w, r, http.StatusUnauthorized, MsgUnauthorized, RespError)
+		return
+	}
+	items, err := s.OrderSerice.ListIncomingTripHandovers(r.Context(), claims.ID, claims.Role)
+	if err != nil {
+		s.writeOrderServiceError(w, r, err)
+		return
+	}
+	s.JSON(w, r, http.StatusOK, items, "handovers")
+}
+
 func (s *Server) ListTripHandovers(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 	claims, ok := r.Context().Value(UserKey).(*Claims)
 	if !ok {

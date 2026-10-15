@@ -8,6 +8,7 @@ import (
 
 type DeliveryCompleted struct {
 	Fields             []DocumentField `json:"fields,omitempty"`
+	Recipients         []uuid.UUID     `json:"recipients,omitempty"`
 	EventID            uuid.UUID       `json:"event_id"`
 	OrderID            uuid.UUID       `json:"order_id"`
 	UserID             uuid.UUID       `json:"user_id"`

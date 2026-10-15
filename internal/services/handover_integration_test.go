@@ -43,6 +43,23 @@ func TestTripHandoverPreservesHistoryAndRevalidatesReservation(t *testing.T) {
 	if _, err = f.service.GetOrder(ctx, f.order.ID, target.driverUserID, "driver"); err != nil {
 		t.Fatalf("incoming cannot inspect invitation: %v", err)
 	}
+	refs, err := f.service.GetOrderReferences(ctx, f.order.ID, target.driverUserID, "driver")
+	if err != nil || refs.Drivers[target.driver.ID.String()] == "" || refs.Assignments[f.offer.ID.String()] == "" {
+		t.Fatalf("incoming invitation lacks participant labels: %+v %v", refs, err)
+	}
+	invites, err := f.service.ListIncomingTripHandovers(ctx, target.driverUserID, "driver")
+	if err != nil || len(invites) != 1 || invites[0].ID != h.ID {
+		t.Fatalf("incoming invitation missing: %+v %v", invites, err)
+	}
+	for _, actor := range []uuid.UUID{f.driverUserID, uuid.New()} {
+		items, listErr := f.service.ListIncomingTripHandovers(ctx, actor, "driver")
+		if listErr != nil || len(items) != 0 {
+			t.Fatalf("invitation leaked to another driver: %+v %v", items, listErr)
+		}
+	}
+	if _, err = f.service.ListIncomingTripHandovers(ctx, target.driverUserID, "client"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("client listed invitations: %v", err)
+	}
 	if _, err = f.service.UpdateTripHandover(ctx, h.ID, target.driverUserID, "driver", "accept"); !errors.Is(err, ErrAssignmentStale) {
 		t.Fatalf("accepted before release: %v", err)
 	}
@@ -78,6 +95,10 @@ func TestTripHandoverPreservesHistoryAndRevalidatesReservation(t *testing.T) {
 	}
 	if handed.Status != "completed" || handed.NextAssignmentID == nil || handed.OutgoingConfirmedAt == nil {
 		t.Fatalf("handover %+v", handed)
+	}
+	invites, err = f.service.ListIncomingTripHandovers(ctx, target.driverUserID, "driver")
+	if err != nil || len(invites) != 0 {
+		t.Fatalf("completed invitation still listed: %+v %v", invites, err)
 	}
 	assertOfferStatus(t, f, models.AssignmentReleased)
 	current, err := f.service.GetOrder(ctx, f.order.ID, f.ownerID, "client")
@@ -141,6 +162,10 @@ func TestTripHandoverExpiryCancellationAndWrongActor(t *testing.T) {
 	}
 	if _, err = pool.Exec(ctx, `UPDATE trip_handovers SET created_at=NOW()-INTERVAL '16 minutes',expires_at=NOW()-INTERVAL '1 minute' WHERE id=$1`, h.ID); err != nil {
 		t.Fatal(err)
+	}
+	invites, err := f.service.ListIncomingTripHandovers(ctx, target.driverUserID, "driver")
+	if err != nil || len(invites) != 0 {
+		t.Fatalf("expired invitation still listed before cleanup: %+v %v", invites, err)
 	}
 	if _, err = f.service.UpdateTripHandover(ctx, h.ID, target.driverUserID, "driver", "accept"); !errors.Is(err, ErrAssignmentExpired) {
 		t.Fatalf("expired request accepted: %v", err)

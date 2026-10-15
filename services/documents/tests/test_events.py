@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from document_service import events
-from document_service.models import Document, OutboxEvent
+from document_service.models import Document, DocumentRecipient, OutboxEvent
 from document_service.modules.documents import service
 
 
@@ -55,6 +55,8 @@ def valid_payload():
     [
         b"{broken",
         json.dumps({**valid_payload(), "order_id": str(UUID(int=0))}).encode(),
+        json.dumps({**valid_payload(), "recipients": [str(UUID(int=0))]}).encode(),
+        json.dumps({**valid_payload(), "recipients": [str(uuid4())] * 21}).encode(),
     ],
 )
 def test_invalid_delivery_is_isolated_before_ack(data):
@@ -79,9 +81,14 @@ def test_invalid_delivery_is_isolated_before_ack(data):
     asyncio.run(scenario())
 
 
-def test_transient_delivery_failure_then_duplicate(monkeypatch):
+@pytest.mark.parametrize("extra_recipient", [False, True])
+def test_transient_delivery_failure_then_duplicate(monkeypatch, extra_recipient):
     async def scenario():
-        data = json.dumps(valid_payload()).encode()
+        payload = valid_payload()
+        recipient = uuid4()
+        if extra_recipient:
+            payload["recipients"] = [str(recipient), str(recipient), payload["user_id"]]
+        data = json.dumps(payload).encode()
         message = Message(data)
         js = SimpleNamespace(publish=AsyncMock())
         monkeypatch.setattr(
@@ -93,6 +100,8 @@ def test_transient_delivery_failure_then_duplicate(monkeypatch):
                 self.document = None
                 self.pending = []
                 self.outbox_count = 0
+                self.recipients = []
+                self.notified_users = set()
 
             async def scalar(self, _query):
                 return self.document
@@ -111,6 +120,9 @@ def test_transient_delivery_failure_then_duplicate(monkeypatch):
                         self.document = value
                     elif isinstance(value, OutboxEvent):
                         self.outbox_count += 1
+                        self.notified_users.add(value.payload["user_id"])
+                    elif isinstance(value, DocumentRecipient):
+                        self.recipients.append(value.user_id)
                 self.pending.clear()
 
         db = Database()
@@ -130,7 +142,12 @@ def test_transient_delivery_failure_then_duplicate(monkeypatch):
         await events.process_delivery_message(message, js, db, "font")
         await events.process_delivery_message(message, js, db, "font")
         assert db.document is not None
-        assert db.outbox_count == 1
+        assert db.outbox_count == (2 if extra_recipient else 1)
+        assert db.recipients == ([recipient] if extra_recipient else [])
+        assert db.notified_users == {
+            payload["user_id"],
+            *([str(recipient)] if extra_recipient else []),
+        }
         assert attempts == 3
         assert message.ack.await_count == 2
         js.publish.assert_not_awaited()

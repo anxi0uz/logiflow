@@ -440,6 +440,17 @@ components:
 
     # ─── Order ────────────────────────────────────────────────────────────────
 
+    OrderReferences:
+      type: object
+      description: Текущие названия только участников и ресурсов доступного заказа. Не заменяют неизменяемые снимки документов. Ключи словарей — UUID; значения — подписи для интерфейса, без email, телефонов и других данных профиля.
+      required: [users, drivers, vehicles, warehouses, assignments]
+      properties:
+        users: { type: object, additionalProperties: { type: string } }
+        drivers: { type: object, additionalProperties: { type: string } }
+        vehicles: { type: object, additionalProperties: { type: string } }
+        warehouses: { type: object, additionalProperties: { type: string } }
+        assignments: { type: object, additionalProperties: { type: string } }
+
     Order:
       type: object
       properties:
@@ -1652,6 +1663,29 @@ paths:
         "200": { description: Контрагент обновлён }
         "404": { description: Запись не принадлежит пользователю }
         "422": { description: Некорректные реквизиты }
+  /api/v1/orders/{id}/references:
+    get:
+      operationId: getOrderReferences
+      tags: [Orders]
+      summary: Имена участников и названия ресурсов карточки заказа
+      description: Те же права, что у GetOrder, включая действующее приглашение на передачу и историю прежнего водителя.
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Подписи ссылок заказа
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [references]
+                properties:
+                  references: { $ref: '#/components/schemas/OrderReferences' }
+        '401': { description: Требуется авторизация }
+        '403': { description: Нет доступа к заказу }
+        '404': { description: Заказ не найден }
+
   /api/v1/orders/{id}/transport-details:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -2267,6 +2301,27 @@ paths:
         '403': { description: Недостаточно прав }
         '409': { description: Неверное состояние или уже есть запрос }
         '422': { description: Некорректные данные или ресурсы }
+
+  /api/v1/handovers/incoming:
+    get:
+      operationId: listIncomingTripHandovers
+      security: [{ BearerAuth: [] }]
+      summary: Собственные входящие передачи груза водителя
+      description: Только действующие pending приглашения в рейсах in_transit с активным прежним назначением. Не требует наличия назначения у принимающего водителя.
+      responses:
+        '200':
+          description: Входящие приглашения
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [handovers]
+                properties:
+                  handovers:
+                    type: array
+                    items: { $ref: '#/components/schemas/TripHandover' }
+        '401': { description: Требуется авторизация }
+        '403': { description: Только для водителя }
 
   /api/v1/handovers/{id}/confirm-release:
     parameters:

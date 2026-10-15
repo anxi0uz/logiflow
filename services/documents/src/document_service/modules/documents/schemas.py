@@ -23,6 +23,7 @@ class DeliveryCompleted(BaseModel):
     delivered_at: datetime
     recipient_name: str | None = None
     fields: list[DocumentField] = Field(default_factory=list, max_length=200)
+    recipients: list[UUID] = Field(default_factory=list, max_length=20)
     driver_id: UUID
     vehicle_id: UUID
 
@@ -32,6 +33,13 @@ class DeliveryCompleted(BaseModel):
         if value.int == 0:
             raise ValueError("ID must not be nil")
         return value
+
+    @field_validator("recipients")
+    @classmethod
+    def nonzero_recipients(cls, values: list[UUID]) -> list[UUID]:
+        if any(value.int == 0 for value in values):
+            raise ValueError("recipient ID must not be nil")
+        return values
 
 
 class DocumentReady(BaseModel):

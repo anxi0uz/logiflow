@@ -27,6 +27,7 @@ type OrderService struct {
 	routePlanner routing.Planner
 }
 type OrderServicer interface {
+	GetOrderReferences(context.Context, uuid.UUID, uuid.UUID, string) (*models.OrderReferences, error)
 	CreateCounterparty(context.Context, uuid.UUID, string, api.CounterpartyWrite) (*models.Counterparty, error)
 	GetCounterparty(context.Context, uuid.UUID, uuid.UUID, string) (*models.Counterparty, error)
 	ListCounterparties(context.Context, uuid.UUID, string, api.ListCounterpartiesParams) ([]models.Counterparty, error)
@@ -44,6 +45,7 @@ type OrderServicer interface {
 
 	CreateTripHandover(context.Context, uuid.UUID, uuid.UUID, string, api.TripHandoverCreate) (*models.TripHandover, error)
 	ListTripHandovers(context.Context, uuid.UUID, uuid.UUID, string) ([]models.TripHandover, error)
+	ListIncomingTripHandovers(context.Context, uuid.UUID, string) ([]models.TripHandover, error)
 	UpdateTripHandover(context.Context, uuid.UUID, uuid.UUID, string, string) (*models.TripHandover, error)
 	CreateOrder(ctx context.Context, req api.OrderCreate, userID uuid.UUID, role string) (*CreateOrderResult, error)
 	ListOrders(ctx context.Context, userID uuid.UUID, role string, params api.ListOrdersParams) ([]models.Order, error)
